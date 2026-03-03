@@ -106,28 +106,34 @@ unzip data/lichess_elite/lichess_elite_2025-11.zip -d data/lichess_elite/
 # Produces: lichess_elite_2025-11.pgn
 ```
 
-Alternatively, if you prepared a large .npz locally, upload it instead
-(5M positions ≈ 220 MB — faster than uploading the full PGN):
+Alternatively, if you ran `prepare_data.py` locally, upload the chunk files
+(10 × ~22 MB = ~220 MB total — faster than uploading the full PGN):
 
 ```bash
 # On the VM — create the data directory first:
 mkdir -p ~/chess-nanozero/data/lichess_elite
 
 # From your LOCAL machine:
-gcloud compute scp data/lichess_elite/sample_5m.npz \
+gcloud compute scp data/lichess_elite/sample_5m_part*.npz \
     <vm-name>:~/chess-nanozero/data/lichess_elite/ \
     --zone=<zone>
 ```
 
 #### Extract 5M positions (if using PGN)
 
+5M × 18×8×8 × 4 bytes = 21.5 GB — too large to hold in RAM at once.
+The script automatically splits into 500K-position chunks (~2.2 GB each):
+
 ```bash
-# On the VM (~3 min):
+# On the VM (~15-20 min). Produces 10 chunk files:
+#   sample_5m_part001.npz ... sample_5m_part010.npz
 python3 scripts/prepare_data.py \
     --pgn data/lichess_elite/lichess_elite_2025-11.pgn \
     --output data/lichess_elite/sample_5m.npz \
     --max-positions 5000000
 ```
+
+Progress is printed every 500K positions so you can confirm it's running.
 
 #### Run Step 4
 
@@ -135,9 +141,10 @@ python3 scripts/prepare_data.py \
 # Run in a tmux session so it survives disconnects
 tmux new -s training
 
+# Pass all chunk files via shell glob — ChessDataset concatenates them
 python3 scripts/train_supervised.py \
     --config configs/medium.yaml \
-    --data data/lichess_elite/sample_5m.npz \
+    --data data/lichess_elite/sample_5m_part*.npz \
     --checkpoint-dir checkpoints/step4/ \
     --log-file logs/step4_medium_5m.csv
 
