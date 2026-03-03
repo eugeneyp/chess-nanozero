@@ -57,7 +57,8 @@ def main() -> None:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
-    from src.training.supervised.prepare_data import parse_pgn_to_positions, save_positions
+    import numpy as np
+    from src.training.supervised.prepare_data import stream_pgn_positions
 
     print(f"Parsing {args.pgn} ...")
     print(f"  skip_first_n_moves = {args.skip_first_n_moves}")
@@ -67,18 +68,53 @@ def main() -> None:
         print(f"  max_games          = {args.max_games:,}")
 
     t0 = time.time()
-    positions = parse_pgn_to_positions(
-        args.pgn,
-        skip_first_n_moves=args.skip_first_n_moves,
-        max_games=args.max_games,
-        max_positions=args.max_positions,
-    )
+
+    if args.max_positions:
+        # Pre-allocate arrays — avoids building a Python list of N numpy objects
+        # Memory: 5M positions ≈ 5.8 GB boards + 40 MB moves/results = ~5.8 GB peak
+        n = args.max_positions
+        boards = np.empty((n, 18, 8, 8), dtype=np.float32)
+        moves = np.empty(n, dtype=np.int32)
+        results = np.empty(n, dtype=np.float32)
+
+        count = 0
+        last_report = 0
+        for encoding, move_idx, value in stream_pgn_positions(
+            args.pgn,
+            skip_first_n_moves=args.skip_first_n_moves,
+            max_games=args.max_games,
+            max_positions=args.max_positions,
+        ):
+            boards[count] = encoding
+            moves[count] = move_idx
+            results[count] = value
+            count += 1
+            if count - last_report >= 100_000:
+                elapsed = time.time() - t0
+                print(f"  {count:,} positions  ({count / elapsed:.0f} pos/s)", flush=True)
+                last_report = count
+
+        # Trim to actual count (in case fewer positions were found)
+        boards = boards[:count]
+        moves = moves[:count]
+        results = results[:count]
+    else:
+        # No limit — collect into list then stack (fine for small extractions)
+        pos_list = list(stream_pgn_positions(
+            args.pgn,
+            skip_first_n_moves=args.skip_first_n_moves,
+            max_games=args.max_games,
+        ))
+        count = len(pos_list)
+        boards = np.stack([p[0] for p in pos_list], axis=0).astype(np.float32)
+        moves = np.array([p[1] for p in pos_list], dtype=np.int32)
+        results = np.array([p[2] for p in pos_list], dtype=np.float32)
 
     elapsed = time.time() - t0
-    print(f"Parsed {len(positions):,} positions in {elapsed:.1f}s")
+    print(f"Parsed {count:,} positions in {elapsed:.1f}s")
 
     print(f"Saving to {args.output} ...")
-    save_positions(positions, args.output)
+    np.savez_compressed(args.output, boards=boards, moves=moves, results=results)
 
     size_mb = args.output.stat().st_size / 1_048_576
     print(f"Done. File size: {size_mb:.1f} MB")

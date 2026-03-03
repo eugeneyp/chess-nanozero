@@ -17,6 +17,74 @@ import numpy as np
 from src.game.encoding import encode_board, move_to_index
 
 
+def stream_pgn_positions(
+    pgn_path: str | Path | io.StringIO,
+    skip_first_n_moves: int = 6,
+    max_games: int | None = None,
+    max_positions: int | None = None,
+):
+    """Generator version of parse_pgn_to_positions — yields one position at a time.
+
+    Yields:
+        (board_encoding, move_index, value) triples (same format as
+        parse_pgn_to_positions) without building an in-memory list.
+        Use this for large extractions to avoid OOM.
+    """
+    if isinstance(pgn_path, (str, Path)):
+        pgn_file = open(pgn_path, encoding="utf-8", errors="ignore")
+        should_close = True
+    else:
+        pgn_file = pgn_path
+        should_close = False
+
+    games_parsed = 0
+    positions_yielded = 0
+
+    try:
+        while True:
+            if max_games is not None and games_parsed >= max_games:
+                break
+            if max_positions is not None and positions_yielded >= max_positions:
+                break
+
+            game = chess.pgn.read_game(pgn_file)
+            if game is None:
+                break
+
+            result_str = game.headers.get("Result", "*")
+            if result_str == "1-0":
+                white_result = 1.0
+            elif result_str == "0-1":
+                white_result = -1.0
+            elif result_str == "1/2-1/2":
+                white_result = 0.0
+            else:
+                games_parsed += 1
+                continue
+
+            board = game.board()
+            ply = 0
+
+            for move in game.mainline_moves():
+                if max_positions is not None and positions_yielded >= max_positions:
+                    break
+
+                if ply >= skip_first_n_moves:
+                    value = white_result if board.turn == chess.WHITE else -white_result
+                    encoding = encode_board(board)
+                    move_idx = move_to_index(move, board)
+                    yield (encoding, move_idx, float(value))
+                    positions_yielded += 1
+
+                board.push(move)
+                ply += 1
+
+            games_parsed += 1
+    finally:
+        if should_close:
+            pgn_file.close()
+
+
 def parse_pgn_to_positions(
     pgn_path: str | Path | io.StringIO,
     skip_first_n_moves: int = 6,

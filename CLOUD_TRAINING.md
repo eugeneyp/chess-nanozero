@@ -24,14 +24,14 @@ git clone https://github.com/eugeneyp/chess-nanozero.git
 cd chess-nanozero
 
 # 2. Install PyTorch with CUDA (L4 uses CUDA 12.x)
-pip install torch --index-url https://download.pytorch.org/whl/cu121
+pip3 install torch --index-url https://download.pytorch.org/whl/cu121
 
 # 3. Install project dependencies
-pip install --upgrade pip setuptools
-pip install -e ".[dev]"
+pip3 install --upgrade pip setuptools
+pip3 install -e ".[dev]"
 
 # 4. Verify GPU is visible
-python -c "import torch; print(torch.cuda.get_device_name(0))"
+python3 -c "import torch; print(torch.cuda.get_device_name(0))"
 # Expected output: NVIDIA L4
 ```
 
@@ -47,6 +47,9 @@ Identify any bottlenecks (data loading, batch size) before committing to Step 4.
 **Get data onto VM** — the 50K dataset is already prepared locally (2.2 MB):
 
 ```bash
+# On the VM — create the data directory first:
+mkdir -p ~/chess-nanozero/data/lichess_elite
+
 # From your LOCAL machine:
 gcloud compute scp data/lichess_elite/sample_50k.npz \
     <vm-name>:~/chess-nanozero/data/lichess_elite/ \
@@ -57,7 +60,7 @@ gcloud compute scp data/lichess_elite/sample_50k.npz \
 
 ```bash
 # On the VM:
-python scripts/train_supervised.py \
+python3 scripts/train_supervised.py \
     --config configs/medium.yaml \
     --data data/lichess_elite/sample_50k.npz \
     --checkpoint-dir checkpoints/step3/ \
@@ -91,22 +94,25 @@ Only proceed after Step 3 passes and you are satisfied with the speed.
 Download directly from the Lichess Elite Database (database.nikonoel.fr):
 
 ```bash
-# On the VM — copy the direct link from database.nikonoel.fr, then:
+# On the VM:
 wget -P data/lichess_elite/ \
-    https://database.nikonoel.fr/lichess_elite_2025-11.pgn.zst
+    https://database.nikonoel.fr/lichess_elite_2025-11.zip
 
-# Install zstd if needed
-sudo apt install -y zstd
+# Install unzip if needed
+sudo apt install -y unzip
 
 # Decompress
-zstd -d data/lichess_elite/lichess_elite_2025-11.pgn.zst
-# Produces: lichess_elite_2025-11.pgn (~3-5x larger than .zst)
+unzip data/lichess_elite/lichess_elite_2025-11.zip -d data/lichess_elite/
+# Produces: lichess_elite_2025-11.pgn
 ```
 
 Alternatively, if you prepared a large .npz locally, upload it instead
 (5M positions ≈ 220 MB — faster than uploading the full PGN):
 
 ```bash
+# On the VM — create the data directory first:
+mkdir -p ~/chess-nanozero/data/lichess_elite
+
 # From your LOCAL machine:
 gcloud compute scp data/lichess_elite/sample_5m.npz \
     <vm-name>:~/chess-nanozero/data/lichess_elite/ \
@@ -117,7 +123,7 @@ gcloud compute scp data/lichess_elite/sample_5m.npz \
 
 ```bash
 # On the VM (~3 min):
-python scripts/prepare_data.py \
+python3 scripts/prepare_data.py \
     --pgn data/lichess_elite/lichess_elite_2025-11.pgn \
     --output data/lichess_elite/sample_5m.npz \
     --max-positions 5000000
@@ -129,7 +135,7 @@ python scripts/prepare_data.py \
 # Run in a tmux session so it survives disconnects
 tmux new -s training
 
-python scripts/train_supervised.py \
+python3 scripts/train_supervised.py \
     --config configs/medium.yaml \
     --data data/lichess_elite/sample_5m.npz \
     --checkpoint-dir checkpoints/step4/ \
