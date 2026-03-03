@@ -200,7 +200,7 @@ schedule and data quality matter most for training.
 | 0     | Partial | pyproject.toml done; configs/tools/CLOUD_TRAINING.md deferred to later phases |
 | 1     | ✅ COMPLETE (2026-03-03) | 25/25 tests passing |
 | 2     | ✅ COMPLETE (2026-03-03) | 8/8 tests passing (33 total) |
-| 3     | Pending | |
+| 3     | ✅ COMPLETE (2026-03-03) | 7/7 tests passing (40 total) |
 | 4     | Pending | |
 | 5     | Pending | |
 | 6     | Pending | |
@@ -264,17 +264,30 @@ Implemented: `src/neural_net/model.py` (ChessResNet, ResBlock, masked_policy_pro
 - test_from_config - from_config(dict) produces correct architecture
 - test_batched_masked_probs - masked_policy_probs works on batch of 4
 
-### Phase 3: Data Pipeline + Supervised Training (6-10 hrs)
+### Phase 3: Data Pipeline + Supervised Training (6-10 hrs) ✅ COMPLETE
 
-Implement: prepare_data.py, dataset.py, trainer.py
+Implemented: `src/training/supervised/prepare_data.py`, `src/training/supervised/dataset.py`,
+`src/training/supervised/trainer.py`, `configs/tiny.yaml`, `configs/medium.yaml`,
+`scripts/train_supervised.py`
 
-**Required tests (test_data_pipeline.py) - ALL MUST PASS before training:**
-- test_pgn_parsing - small PGN file, correct position count
-- test_encoding_consistency - PGN positions match manual encoding
-- test_dataset_loading - correct tensor shapes
-- test_train_val_split - no overlap
-- test_skip_first_n_moves - first N excluded
-- test_result_encoding - white win = +1 for white, -1 for black
+**Implementation notes:**
+- `parse_pgn_to_positions(pgn_path, ...)` accepts both file paths and `io.StringIO` (for tests)
+- Games with result `*` (unfinished) are skipped entirely
+- Value from current player's perspective: `white_result if board.turn == WHITE else -white_result`
+- `ChessDataset`: shuffles with fixed seed, val takes first `val_split` fraction of shuffled indices
+- `SupervisedTrainer`: AdamW + CosineAnnealingLR; converts hard move labels to one-hot for `AlphaZeroLoss`
+- Top-1 and top-5 accuracy logged each epoch; checkpoint saves model + optimizer + scheduler state
+- `scripts/train_supervised.py`: CLI with `--config`, `--data` (multi-file), `--checkpoint-dir`, `--resume`
+- Configs (`tiny.yaml`, `medium.yaml`) include `model`, `supervised_training`, `mcts`, and `inference` sections
+
+**Tests (test_data_pipeline.py) - ALL PASS:**
+- test_pgn_parsing - Scholar's Mate (7 half-moves) yields 7 positions with skip=0
+- test_encoding_consistency - first parsed position matches manual `encode_board(chess.Board())`
+- test_dataset_loading - correct tensor shapes and dtypes from saved .npz
+- test_train_val_split - lengths sum to total; both splits non-empty
+- test_skip_first_n_moves - skip=4 gives exactly 4 fewer positions
+- test_result_encoding - White-to-move +1.0, Black-to-move -1.0, draws all 0.0
+- test_unfinished_games_skipped - result `*` yields 0 positions
 
 **Then execute progressive training Steps 1-4.**
 
@@ -327,7 +340,7 @@ chess-alphazero/
     neural_net/        model.py, losses.py
     mcts/              mcts.py, batched_mcts.py, node.py
     training/
-      supervised/      data_pipeline.py, dataset.py, trainer.py
+      supervised/      prepare_data.py, dataset.py, trainer.py
       selfplay/        self_play.py, coach.py, arena.py, replay_buffer.py
       common/          checkpoint.py, logger.py
     agents/            random_agent.py, alphazero_agent.py, uci_agent.py

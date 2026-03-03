@@ -1,0 +1,28 @@
+model:
+  num_res_blocks: 8
+  num_filters: 128
+  input_planes: 18
+  policy_output_size: 4672
+
+supervised_training:
+  batch_size: 2048
+  learning_rate: 0.001
+  lr_schedule: cosine
+  weight_decay: 0.0001
+  num_epochs: 30
+  value_loss_weight: 1.0
+  val_split: 0.05
+  skip_first_n_moves: 6
+
+mcts:
+  num_simulations: 400
+  c_puct: 2.0
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+  temperature: 1.0
+  temperature_threshold_move: 30
+
+inference:
+  max_time_seconds: 5.0
+  default_simulations: 400
+  onnx_export: true
