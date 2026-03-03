@@ -53,8 +53,10 @@ Lichess Elite Database, deployable as Lichess bot and web interface.
 
 ## Input Encoding: 18 planes of 8x8
 
-Current player perspective. Flip board 180 degrees when Black's turn, swap
-piece colors. Same approach as Connect 4.
+Current player perspective. Rank-mirror the board when Black's turn (`sq ^ 56`,
+vertical flip only — files unchanged), swap piece colors. Same approach as
+Connect 4. Note: this is NOT a 180° rotation; files stay in place so
+kingside/queenside orientation is preserved.
 
 | Planes | Content |
 |--------|---------|
@@ -190,6 +192,20 @@ schedule and data quality matter most for training.
    alongside implementation (TDD preferred).
 2. **All tests runnable with `pytest tests/ -v`.**
 3. **Follow progressive training - do NOT skip to full training.**
+
+### Phase Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| 0     | Partial | pyproject.toml done; configs/tools/CLOUD_TRAINING.md deferred to later phases |
+| 1     | ✅ COMPLETE (2026-03-03) | 25/25 tests passing |
+| 2     | Pending | |
+| 3     | Pending | |
+| 4     | Pending | |
+| 5     | Pending | |
+| 6     | Pending | |
+| 7     | Pending | |
+| 8     | Pending | |
 
 ### Phase 0: Project Setup (2-3 hrs)
 
