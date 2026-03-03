@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import datetime
 import time
 from pathlib import Path
 
@@ -150,14 +152,16 @@ class SupervisedTrainer:
         val_loader: DataLoader | None,
         num_epochs: int | None = None,
         checkpoint_dir: Path | None = None,
+        log_file: Path | None = None,
     ) -> None:
-        """Full training loop with optional checkpointing.
+        """Full training loop with optional checkpointing and CSV logging.
 
         Args:
             train_loader: DataLoader for training data.
             val_loader: DataLoader for validation data (None = skip validation).
             num_epochs: Number of epochs (defaults to self.num_epochs).
             checkpoint_dir: Directory to save checkpoints (None = no checkpoints).
+            log_file: CSV file to append epoch metrics (None = no file logging).
         """
         if num_epochs is None:
             num_epochs = self.num_epochs
@@ -166,32 +170,76 @@ class SupervisedTrainer:
             checkpoint_dir = Path(checkpoint_dir)
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        for epoch in range(1, num_epochs + 1):
-            train_metrics = self.train_epoch(train_loader)
-            self.scheduler.step()
+        csv_fields = [
+            "timestamp", "epoch",
+            "train_loss", "train_policy_loss", "train_value_loss",
+            "train_top1", "train_top5", "samples_per_sec",
+            "val_loss", "val_policy_loss", "val_value_loss",
+            "val_top1", "val_top5",
+        ]
 
-            val_str = ""
-            if val_loader is not None:
-                val_metrics = self.validate(val_loader)
-                val_str = (
-                    f" | val_loss={val_metrics['loss']:.4f}"
-                    f" val_top1={val_metrics['top1_acc']:.3f}"
+        if log_file is not None:
+            log_file = Path(log_file)
+            write_header = not log_file.exists()
+            log_fh = open(log_file, "a", newline="")
+            writer = csv.DictWriter(log_fh, fieldnames=csv_fields)
+            if write_header:
+                writer.writeheader()
+                log_fh.flush()
+        else:
+            log_fh = None
+            writer = None
+
+        try:
+            for epoch in range(1, num_epochs + 1):
+                train_metrics = self.train_epoch(train_loader)
+                self.scheduler.step()
+
+                val_metrics: dict = {}
+                val_str = ""
+                if val_loader is not None:
+                    val_metrics = self.validate(val_loader)
+                    val_str = (
+                        f" | val_loss={val_metrics['loss']:.4f}"
+                        f" val_top1={val_metrics['top1_acc']:.3f}"
+                    )
+
+                print(
+                    f"Epoch {epoch}/{num_epochs}"
+                    f" | loss={train_metrics['loss']:.4f}"
+                    f" policy={train_metrics['policy_loss']:.4f}"
+                    f" value={train_metrics['value_loss']:.4f}"
+                    f" top1={train_metrics['top1_acc']:.3f}"
+                    f" top5={train_metrics['top5_acc']:.3f}"
+                    f" {train_metrics['samples_per_sec']:.0f} samp/s"
+                    + val_str
                 )
 
-            print(
-                f"Epoch {epoch}/{num_epochs}"
-                f" | loss={train_metrics['loss']:.4f}"
-                f" policy={train_metrics['policy_loss']:.4f}"
-                f" value={train_metrics['value_loss']:.4f}"
-                f" top1={train_metrics['top1_acc']:.3f}"
-                f" top5={train_metrics['top5_acc']:.3f}"
-                f" {train_metrics['samples_per_sec']:.0f} samp/s"
-                + val_str
-            )
+                if writer is not None:
+                    row = {
+                        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "epoch": epoch,
+                        "train_loss": f"{train_metrics['loss']:.6f}",
+                        "train_policy_loss": f"{train_metrics['policy_loss']:.6f}",
+                        "train_value_loss": f"{train_metrics['value_loss']:.6f}",
+                        "train_top1": f"{train_metrics['top1_acc']:.6f}",
+                        "train_top5": f"{train_metrics['top5_acc']:.6f}",
+                        "samples_per_sec": f"{train_metrics['samples_per_sec']:.1f}",
+                        "val_loss": f"{val_metrics.get('loss', ''):.6f}" if val_metrics else "",
+                        "val_policy_loss": f"{val_metrics.get('policy_loss', ''):.6f}" if val_metrics else "",
+                        "val_value_loss": f"{val_metrics.get('value_loss', ''):.6f}" if val_metrics else "",
+                        "val_top1": f"{val_metrics.get('top1_acc', ''):.6f}" if val_metrics else "",
+                        "val_top5": f"{val_metrics.get('top5_acc', ''):.6f}" if val_metrics else "",
+                    }
+                    writer.writerow(row)
+                    log_fh.flush()
 
-            if checkpoint_dir is not None:
-                ckpt_path = checkpoint_dir / f"epoch_{epoch:04d}.pt"
-                self.save_checkpoint(ckpt_path, epoch)
+                if checkpoint_dir is not None:
+                    ckpt_path = checkpoint_dir / f"epoch_{epoch:04d}.pt"
+                    self.save_checkpoint(ckpt_path, epoch)
+        finally:
+            if log_fh is not None:
+                log_fh.close()
 
     def save_checkpoint(self, path: Path, epoch: int) -> None:
         """Save model, optimizer, and scheduler state to file."""

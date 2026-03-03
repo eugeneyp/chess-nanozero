@@ -21,13 +21,17 @@ def parse_pgn_to_positions(
     pgn_path: str | Path | io.StringIO,
     skip_first_n_moves: int = 6,
     max_games: int | None = None,
+    max_positions: int | None = None,
 ) -> list[tuple[np.ndarray, int, float]]:
     """Parse PGN → list of (board_encoding, move_index, value) triples.
 
     Args:
         pgn_path: Path to PGN file or StringIO object with PGN content.
         skip_first_n_moves: Number of half-moves (plies) to skip from game start.
-        max_games: Maximum number of games to parse (None = all).
+        max_games: Stop after parsing this many games (None = all).
+        max_positions: Stop after collecting this many positions (None = all).
+            Stops mid-file as soon as the limit is reached — efficient for
+            extracting small samples from large PGN files.
 
     Returns:
         List of (board_encoding, move_index, value) where:
@@ -48,6 +52,8 @@ def parse_pgn_to_positions(
     try:
         while True:
             if max_games is not None and games_parsed >= max_games:
+                break
+            if max_positions is not None and len(positions) >= max_positions:
                 break
 
             game = chess.pgn.read_game(pgn_file)
@@ -70,6 +76,9 @@ def parse_pgn_to_positions(
             ply = 0
 
             for move in game.mainline_moves():
+                if max_positions is not None and len(positions) >= max_positions:
+                    break
+
                 if ply >= skip_first_n_moves:
                     # Value from current player's perspective
                     if board.turn == chess.WHITE:

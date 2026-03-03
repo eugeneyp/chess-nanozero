@@ -24,7 +24,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import sys
+import datetime
 from pathlib import Path
 
 import torch
@@ -42,6 +42,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", type=Path, default=None, help="Resume from checkpoint")
     parser.add_argument("--num-epochs", type=int, default=None, help="Override num_epochs")
     parser.add_argument("--device", type=str, default=None, help="cpu / cuda / mps")
+    parser.add_argument(
+        "--log-file", type=Path, default=None,
+        help="CSV log file path. Defaults to logs/<config_stem>_<timestamp>.csv"
+    )
     return parser.parse_args()
 
 
@@ -63,6 +67,14 @@ def main() -> None:
         device = "cpu"
     print(f"Using device: {device}")
 
+    # Resolve log file path
+    log_file = args.log_file
+    if log_file is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_file = Path("logs") / f"{args.config.stem}_{timestamp}.csv"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    print(f"Logging to: {log_file}")
+
     # Build model
     from src.neural_net.model import ChessResNet
     model = ChessResNet.from_config(config)
@@ -79,7 +91,9 @@ def main() -> None:
     print(f"Train: {len(train_ds):,} positions | Val: {len(val_ds):,} positions")
 
     batch_size = train_cfg.get("batch_size", 256)
-    num_workers = min(4, torch.get_num_threads())
+    # num_workers=0 on CPU: avoids multiprocessing overhead and NumPy compat
+    # warnings when workers fail to spawn. Switch to 4+ on GPU (GCP).
+    num_workers = 0 if device == "cpu" else min(4, torch.get_num_threads())
 
     train_loader = torch.utils.data.DataLoader(
         train_ds, batch_size=batch_size, shuffle=True,
@@ -106,6 +120,7 @@ def main() -> None:
         val_loader=val_loader,
         num_epochs=num_epochs,
         checkpoint_dir=args.checkpoint_dir,
+        log_file=log_file,
     )
 
 
