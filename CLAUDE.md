@@ -199,7 +199,7 @@ schedule and data quality matter most for training.
 |-------|--------|-------|
 | 0     | Partial | pyproject.toml done; configs/tools/CLOUD_TRAINING.md deferred to later phases |
 | 1     | ✅ COMPLETE (2026-03-03) | 25/25 tests passing |
-| 2     | Pending | |
+| 2     | ✅ COMPLETE (2026-03-03) | 8/8 tests passing (33 total) |
 | 3     | Pending | |
 | 4     | Pending | |
 | 5     | Pending | |
@@ -240,17 +240,29 @@ Implement: chess_game.py (python-chess wrapper for MCTS), encoding.py
 - test_game_result - checkmate, stalemate, draw by repetition, 50-move
 - test_make_undo_move - push/pop preserves state
 
-### Phase 2: Neural Network (2-3 hrs)
+### Phase 2: Neural Network (2-3 hrs) ✅ COMPLETE
 
-Implement: ChessResNet (parametric dual-head), combined loss
+Implemented: `src/neural_net/model.py` (ChessResNet, ResBlock, masked_policy_probs),
+`src/neural_net/losses.py` (AlphaZeroLoss)
 
-**Required tests (test_model.py) - ALL MUST PASS before Phase 3:**
+**Implementation notes:**
+- Policy head: F→32 (Conv 1x1, BN, ReLU) → 73 (Conv 1x1, bias=True) → flatten to 4672
+- Value head: F→1 (Conv 1x1, BN, ReLU) → flatten to 64 → FC(64,256) → ReLU → FC(256,1) → Tanh
+- `masked_policy_probs(logits, mask)`: sets illegal indices to `-inf`, then softmax
+- `AlphaZeroLoss`: KL-style CE for policy (`-(target * log_softmax).sum`), MSE for value
+- `ChessResNet.from_config(cfg)` reads the `model:` section of a YAML config dict
+- NUM_PLANES=18 and POLICY_SIZE=4672 imported from `src/game/encoding.py` (single source of truth)
+- PyTorch compat: convert numpy bool masks via `.astype(np.uint8)` + `dtype=torch.bool`
+
+**Tests (test_model.py) - ALL PASS:**
 - test_forward_pass_shape - (B,18,8,8) -> policy (B,4672), value (B,1)
 - test_value_range - output in [-1, +1]
 - test_policy_masking - mask illegal, softmax over legal = 1.0
 - test_different_configs - tiny/medium/large correct shapes
 - test_gradient_flow - backward pass, non-zero grads everywhere
 - test_loss_computation - known inputs -> expected loss
+- test_from_config - from_config(dict) produces correct architecture
+- test_batched_masked_probs - masked_policy_probs works on batch of 4
 
 ### Phase 3: Data Pipeline + Supervised Training (6-10 hrs)
 
