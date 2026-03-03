@@ -189,10 +189,12 @@ gcloud compute scp \
 
 ## Cost Estimates
 
-| Step | Model  | Data  | Time est. | L4 cost |
-|------|--------|-------|-----------|---------|
-| 3    | medium | 50K   | ~15 min   | <$0.20  |
-| 4    | medium | 5M    | 8–24 hrs  | $6–$17  |
+| Step | Model  | Data  | Time est.        | L4 cost |
+|------|--------|-------|------------------|---------|
+| 3    | medium | 50K   | ~15 min          | <$0.20  |
+| 4    | medium | 5M    | ~5 hrs @ 8758 s/s | ~$3.50  |
+
+Calculation for Step 4: 5M × 30 epochs / 8,758 samp/s ≈ 4 hrs 45 min + ~10 min chunk-load overhead.
 
 Stop the VM (not delete) between sessions to avoid idle charges:
 
