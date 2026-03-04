@@ -2,13 +2,14 @@
 # run_tournament.sh — chess-nanozero vs Stockfish benchmarking
 #
 # Usage:
-#   ./tools/run_tournament.sh [rounds=10] [sf_elo=1320] [tc_base=60] [tc_inc=1]
+#   ./tools/run_tournament.sh [rounds=10] [sf_elo=1320] [tc_base=60] [tc_inc=1] [checkpoint=...]
 #
 # Examples:
 #   ./tools/run_tournament.sh             # 20 games smoke test (10 rounds × 2)
 #   ./tools/run_tournament.sh 25          # 50 games ELO estimate
 #   ./tools/run_tournament.sh 25 1500     # vs Stockfish 1500
 #   ./tools/run_tournament.sh 10 1320 120 2  # 2-min game + 2s increment
+#   ./tools/run_tournament.sh 5 1500 60 1 models/medium1.pt  # custom checkpoint
 #
 # ELO formula (printed after run):
 #   Elo ≈ 1320 − 400 × log10((1 − score%) / score%)
@@ -25,7 +26,12 @@ FASTCHESS=/usr/local/bin/fastchess
 STOCKFISH=/usr/local/bin/stockfish
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-CHECKPOINT="${PROJECT_DIR}/checkpoints/step4/epoch_0024.pt"
+# 5th arg can be a path relative to PROJECT_DIR or absolute
+if [ -n "${5:-}" ]; then
+    CHECKPOINT="${PROJECT_DIR}/${5}"
+else
+    CHECKPOINT="${PROJECT_DIR}/checkpoints/step4/epoch_0024.pt"
+fi
 CONFIG="${PROJECT_DIR}/configs/medium.yaml"
 RESULTS_DIR="${PROJECT_DIR}/results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -38,6 +44,7 @@ echo "======================================================"
 echo " chess-nanozero vs Stockfish ${SF_ELO}"
 echo " Rounds: ${ROUNDS} (${TOTAL_GAMES} games, -repeat)"
 echo " Time control: ${TC_BASE}s + ${TC_INC}s/move"
+echo " Checkpoint: ${CHECKPOINT}"
 echo " PGN output: ${PGN_OUT}"
 echo "======================================================"
 

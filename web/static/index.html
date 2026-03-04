@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess NanoZero</title>
+
+  <!--
+    Load order matters:
+    1. jQuery first — chessboard.js depends on it
+    2. chessboard.js CSS
+    3. chess.js 0.10.2 — using 0.x API (game_over, in_checkmate, etc.)
+       NOTE: chess.js 1.0+ renamed all methods to camelCase; 0.10.x matches
+       every official chessboard.js example exactly.
+    4. chessboard.js JS — after jQuery
+    5. Local CSS / JS last
+  -->
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+
+  <link rel="stylesheet"
+        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.js"></script>
+
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <header>
+    <h1>Chess NanoZero</h1>
+    <div class="subtitle">AlphaZero · MCTS · ResNet</div>
+  </header>
+
+  <main>
+    <!-- Board area: chessboard.js renders into #board -->
+    <div id="board-container">
+      <div id="board"></div>
+    </div>
+
+    <!-- Side panel: status, score/depth info, controls -->
+    <aside id="panel">
+
+      <div id="status-box" class="panel-card">
+        <div class="card-label">Status</div>
+        <div id="status-text">Your turn</div>
+      </div>
+
+      <div id="info-box" class="panel-card">
+        <div class="info-row">
+          <span class="info-label">Simulations</span>
+          <span class="info-value" id="sims-value">—</span>
+        </div>
+      </div>
+
+      <button id="take-back-btn">Take Back</button>
+
+      <div id="controls" class="panel-card">
+        <label for="time-select" class="card-label">Think time</label>
+        <select id="time-select">
+          <option value="1">1 second</option>
+          <option value="2">2 seconds</option>
+          <option value="3" selected>3 seconds</option>
+          <option value="5">5 seconds</option>
+        </select>
+        <button id="new-game-btn">New Game</button>
+      </div>
+
+    </aside>
+  </main>
+
+  <script src="/static/main.js"></script>
+
+  <footer>
+    <p>Built by Eugene Peng (<a href="https://github.com/eugeneyp/chess-nanozero" target="_blank" style="color: var(--muted); text-decoration: underline;">GitHub</a>)</p>
+  </footer>
+</body>
+</html>

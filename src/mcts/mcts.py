@@ -55,6 +55,7 @@ class MCTS:
                 if time.monotonic() >= deadline:
                     break
 
+        self.root = root
         return self._compute_action_probs(root, temperature)
 
     def _simulate(self, root: MCTSNode) -> None:
