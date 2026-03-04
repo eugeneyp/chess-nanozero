@@ -168,7 +168,7 @@ after baseline model is trained.
 | Param             | Default | Range    | How to tune |
 |-------------------|---------|----------|-------------|
 | c_puct            | 2.0     | 1.0-4.0  | fastchess: 50+ games per value vs Stockfish |
-| num_simulations   | 400     | 100-1600 | Find sweet spot within 5-sec budget |
+| num_simulations   | 800     | 100-1600 | Safety cap; time budget is the real limit with tc= |
 | dirichlet_alpha   | 0.3     | 0.1-0.5  | Only if self-play shows exploration collapse |
 | dirichlet_epsilon | 0.25    | 0.1-0.4  | Only relevant during self-play |
 | temperature       | 1.0->0  | -        | temp=1.0 first 30 moves, then greedy |
@@ -210,7 +210,7 @@ schedule and data quality matter most for training.
 | 2     | ✅ COMPLETE (2026-03-03) | 8/8 tests passing (33 total) |
 | 3     | ✅ COMPLETE (2026-03-03) | 7/7 tests passing (40 total) |
 | 4     | ✅ COMPLETE (2026-03-04) | 6/6 tests passing (46 total) |
-| 5     | Pending | |
+| 5     | ✅ COMPLETE (2026-03-04) | 2/2 tests passing (48 total) |
 | 6     | Pending | |
 | 7     | Pending | |
 | 8     | Pending | |
@@ -319,15 +319,42 @@ Implemented: `src/mcts/node.py`, `src/mcts/mcts.py`, `src/agents/alphazero_agent
 - test_mcts_deterministic - same seed, same result
 - test_inference_speed - 200 sims in <5 seconds on CPU (after warmup)
 
-### Phase 5: Evaluation + Benchmarking (3-4 hrs)
+### Phase 5: UCI Interface + Stockfish Benchmarking (3-4 hrs) ✅ COMPLETE
 
-Implement: uci_agent.py, evaluate.py. Use fastchess from chess-ai.
+Implemented: `src/uci/__init__.py`, `src/uci/uci_engine.py`, `scripts/play_uci.py`,
+`tools/run_tournament.sh`
 
-**Required tests:**
-- test_uci_agent_interface - start/stop Stockfish, get bestmove
-- test_match_runner - 2-game match without crash
+**Implementation notes:**
+- `UCIEngine`: lazy model load on `isready` (first call only), `handle_position` parses
+  `startpos`/`fen` + move list, `handle_go` spawns daemon thread, `handle_stop` joins thread
+- Tournament play always uses `temperature=0.0, add_noise=False` (greedy, deterministic)
+- fastchess bug: treats `RLIM_INFINITY` soft limit as -1 (signed int overflow). Fix: set
+  concrete soft limit `resource.setrlimit(RLIMIT_NOFILE, (4096, hard))` before calling fastchess
+- fastchess syntax: `cmd=<binary> args="<script> --arg val"` (not `cmd=<full command string>`)
+- **Time-based MCTS:** `handle_go` parses `movetime`/`wtime`/`btime`/`winc`/`binc` tokens,
+  computes a deadline (`time.monotonic() + budget * 0.9`), passes it to `get_action_probs()`.
+  MCTS checks every 10 sims and stops early if deadline reached. `num_simulations=800` acts
+  as safety cap so `go infinite` doesn't run forever.
+- Time budget formula: `movetime * 0.9` or `(time_left/40 + increment) * 0.9`
+- `run_tournament.sh`: uses `tc=BASE+INC` game clock (not per-move `st=`); no `--num-simulations`
+  arg needed — time is the effective limit. Usage: `[rounds=10] [sf_elo=1320] [tc_base=60] [tc_inc=1]`
+- With `tc=60+1`: ~2.25s/move budget → ~15 sims at 150ms/sim → ~3 min/game (vs 20 min with `st=15`)
 
-**Benchmarking:** 100+ games vs Stockfish Skill Level 0-5
+**Tests (test_uci.py) - ALL PASS:**
+- test_uci_protocol - full UCI handshake: uci→uciok, isready→readyok, go→bestmove
+- test_match_runner - 2-game fastchess match (1 round × 2) vs Stockfish 1320, returncode 0
+
+**Benchmarking workflow:**
+```bash
+# Smoke test (2 games, ~6 min)
+./tools/run_tournament.sh 1 1320
+# ELO estimate (50 games, ~2.5 hrs)
+./tools/run_tournament.sh 25 1320
+# vs stronger opponent
+./tools/run_tournament.sh 25 1500
+# longer time control (more sims per move)
+./tools/run_tournament.sh 10 1320 120 2
+```
 
 ### Phase 6: UCI Protocol + Lichess Bot (3-4 hrs)
 

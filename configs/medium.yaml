@@ -15,7 +15,7 @@ supervised_training:
   skip_first_n_moves: 6
 
 mcts:
-  num_simulations: 400
+  num_simulations: 800
   c_puct: 2.0
   dirichlet_alpha: 0.3
   dirichlet_epsilon: 0.25

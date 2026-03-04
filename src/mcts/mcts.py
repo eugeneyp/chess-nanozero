@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+from typing import Optional
+
 import numpy as np
 import torch
 
@@ -30,21 +33,27 @@ class MCTS:
         self.dirichlet_epsilon = mcts_cfg.get("dirichlet_epsilon", 0.25)
 
     def get_action_probs(
-        self, game: ChessGame, temperature: float = 1.0, add_noise: bool = True
+        self, game: ChessGame, temperature: float = 1.0, add_noise: bool = True,
+        deadline: Optional[float] = None,
     ) -> dict[chess.Move, float]:
         """Run simulations; return {move: probability} from visit counts.
 
         temperature=1.0  → sample proportional to N(s,a)
         temperature=0.0  → argmax (greedy, used after move 30)
         add_noise=False  → deterministic (for evaluation, tests)
+        deadline         → time.monotonic() deadline; stop early if reached
         """
         root = MCTSNode(game, prior=1.0)
         self._expand(root)
         if add_noise and root.children:
             self._add_dirichlet_noise(root)
 
-        for _ in range(self.num_simulations):
+        TIME_CHECK_INTERVAL = 10
+        for i in range(self.num_simulations):
             self._simulate(root)
+            if deadline is not None and i % TIME_CHECK_INTERVAL == (TIME_CHECK_INTERVAL - 1):
+                if time.monotonic() >= deadline:
+                    break
 
         return self._compute_action_probs(root, temperature)
 
