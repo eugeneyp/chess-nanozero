@@ -41,8 +41,8 @@ def parse_args() -> argparse.Namespace:
                         help="One or more .npz data files (glob-expanded by shell)")
     parser.add_argument("--checkpoint-dir", type=Path, default=Path("checkpoints/step5"))
     parser.add_argument("--num-epochs", type=int, default=10)
-    parser.add_argument("--lr", type=float, default=1e-4,
-                        help="Initial learning rate (default 1e-4, 10× lower than step 4)")
+    parser.add_argument("--lr", type=float, default=5e-4,
+                        help="Initial learning rate (default 5e-4)")
     parser.add_argument("--patience", type=int, default=2,
                         help="ReduceLROnPlateau patience (epochs with no improvement)")
     parser.add_argument("--factor", type=float, default=0.5,
