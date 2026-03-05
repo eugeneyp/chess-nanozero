@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 
 import chess
+import numpy as np
+import torch
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -23,6 +25,8 @@ from pydantic import BaseModel, field_validator
 
 from src.agents.alphazero_agent import AlphaZeroAgent
 from src.game.chess_game import ChessGame
+from src.game.encoding import encode_board, get_legal_move_mask, index_to_move
+from src.neural_net.model import masked_policy_probs
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -73,7 +77,7 @@ class MoveRequest(BaseModel):
     @field_validator("time_limit")
     @classmethod
     def clamp_time_limit(cls, v: float) -> float:
-        return max(0.5, min(v, 10.0))
+        return max(0.0, min(v, 10.0))
 
 
 class MoveResponse(BaseModel):
@@ -103,23 +107,25 @@ def api_move(request: MoveRequest) -> MoveResponse:
     if board.is_game_over():
         raise HTTPException(status_code=400, detail=f"Game is already over: {board.result()}")
 
-    game = ChessGame(board)
-    deadline = time.monotonic() + request.time_limit
     agent = get_agent()
 
-    probs = agent.mcts.get_action_probs(
-        game, temperature=0.0, add_noise=False, deadline=deadline
-    )
-    if not probs:
-        raise HTTPException(status_code=500, detail="Engine returned no move")
-
-    best_move = max(probs, key=probs.get)
-
-    # Count actual simulations: sum of root children visit counts
-    root = getattr(agent.mcts, "root", None)
-    sims_done = (
-        sum(c.visit_count for c in root.children.values()) if root else 0
-    )
+    if request.time_limit == 0.0:
+        # Pure policy head: single forward pass, no MCTS
+        best_move, policy_prob = _policy_move(board, agent)
+        sims_done = 0
+    else:
+        game = ChessGame(board)
+        # Compute deadline AFTER agent is loaded so model-load time doesn't eat into budget
+        deadline = time.monotonic() + request.time_limit
+        probs = agent.mcts.get_action_probs(
+            game, temperature=0.0, add_noise=False, deadline=deadline
+        )
+        if not probs:
+            raise HTTPException(status_code=500, detail="Engine returned no move")
+        best_move = max(probs, key=probs.get)
+        policy_prob = float(probs[best_move])
+        root = getattr(agent.mcts, "root", None)
+        sims_done = sum(c.visit_count for c in root.children.values()) if root else 0
 
     _log.info("move=%s sims=%d fen=%s", best_move.uci(), sims_done, request.fen[:40])
 
@@ -127,9 +133,23 @@ def api_move(request: MoveRequest) -> MoveResponse:
     return MoveResponse(
         move=best_move.uci(),
         fen=board.fen(),
-        score=float(probs.get(best_move, 0.0)),
+        score=policy_prob,
         simulations=sims_done,
     )
+
+
+def _policy_move(board: chess.Board, agent: AlphaZeroAgent) -> tuple[chess.Move, float]:
+    """Pick best move using the policy head only — no MCTS tree search."""
+    encoding = encode_board(board)
+    board_t = torch.frombuffer(encoding.tobytes(), dtype=torch.float32).reshape(1, 18, 8, 8)
+    with torch.no_grad():
+        policy_logits, _ = agent.mcts.model(board_t)
+    mask = get_legal_move_mask(board)
+    mask_t = torch.frombuffer(mask.tobytes(), dtype=torch.uint8).bool()
+    probs_t = masked_policy_probs(policy_logits[0], mask_t)
+    best_idx = int(probs_t.argmax().item())
+    best_move = index_to_move(best_idx, board)
+    return best_move, float(probs_t[best_idx].item())
 
 
 @app.get("/", include_in_schema=False)
