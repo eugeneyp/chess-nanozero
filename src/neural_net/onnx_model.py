@@ -8,6 +8,8 @@ Typical speedup vs raw PyTorch on CPU: 3-7x (fp32), up to 10x with INT8.
 
 from __future__ import annotations
 
+import ctypes
+
 import numpy as np
 import torch
 import onnxruntime
@@ -41,12 +43,14 @@ class OnnxModel:
             value:         (B, 1)    torch tensor
         """
         # torch.Tensor.numpy() is broken with numpy 2.x / torch 2.2.x (C-API mismatch).
-        # Workaround: reinterpret float32 tensor as uint8 bytes → Python bytes object
-        # → np.frombuffer (reads from Python buffer, no numpy C-API involved).
+        # ctypes.memmove: single C-level copy, no Python list/bytes object overhead.
+        # Bypasses torch.Tensor.numpy() which fails with numpy 2.x / torch 2.2.x C-API.
         board_contig = board_t.contiguous().cpu()
-        board_bytes = bytes(board_contig.view(torch.uint8).flatten().tolist())
-        board_np = np.frombuffer(board_bytes, dtype=np.float32).reshape(
-            tuple(board_contig.shape)
+        board_np = np.empty(tuple(board_contig.shape), dtype=np.float32)
+        ctypes.memmove(
+            board_np.ctypes.data,       # destination: numpy data pointer
+            board_contig.data_ptr(),    # source: tensor raw data pointer
+            board_contig.numel() * 4,   # bytes: n_elements × sizeof(float32)
         )
 
         policy_np, value_np = self.session.run(None, {"board": board_np})
