@@ -176,7 +176,7 @@ gcloud compute ssh <vm-name> --zone=<zone> -- \
 Loads weights only from step 4's best checkpoint; fresh optimizer at lower LR.
 Uses `ReduceLROnPlateau` (adaptive) instead of cosine annealing (fixed schedule).
 
-**Prerequisites:** Same 5M chunk files on VM from Step 4. Pull latest code first:
+**Prerequisites:** Same PGN file on VM from Step 4. Pull latest code first:
 
 ```bash
 git pull  # get scripts/train_step5.py
@@ -228,8 +228,74 @@ gcloud compute scp \
     --zone=<zone>
 ```
 
-**Expected runtime:** ~5 hrs (same dataset/speed as Step 4, 10 epochs instead of 30).
-**Expected cost:** ~$3.50 (L4 at $0.70/hr × 5 hrs).
+**Expected runtime:** ~1.7 hrs (same dataset/speed as Step 4, 10 epochs instead of 30).
+**Expected cost:** ~$1.20 (L4 at $0.70/hr × 1.7 hrs).
+
+**Result (2026-03-05):** Val_top1 improved only marginally (57-59% vs 61% in step 4).
+Dataset is effectively exhausted — step 6 trains on fresh positions from the same PGN.
+
+---
+
+### Step 6: Train on fresh 5M positions (non-overlapping with step 4)
+
+**Purpose:** The same PGN file has ~15M positions total; step 4 used only the first 5M.
+Training on the next 5M gives the model data it has never seen, which should yield
+step-4-scale improvements.
+
+**Step 1: Extract the next 5M positions** (on the VM, ~15-20 min):
+
+```bash
+python3 scripts/prepare_data.py \
+    --pgn data/lichess_elite/lichess_elite_2025-11.pgn \
+    --output data/lichess_elite/sample_5m_b.npz \
+    --skip-positions 5000000 \
+    --max-positions 5000000
+# Produces: sample_5m_b_part001.npz ... sample_5m_b_part010.npz
+```
+
+`--skip-positions 5000000` fast-forwards past exactly the positions used in step 4,
+guaranteeing zero overlap. Progress is printed every 500K positions.
+
+**Step 2: Train** (starting from step 4's best checkpoint):
+
+```bash
+tmux new -s step6
+
+python3 scripts/train_step5.py \
+    --checkpoint checkpoints/step4/epoch_0024.pt \
+    --data data/lichess_elite/sample_5m_b_part*.npz \
+    --checkpoint-dir checkpoints/step6/
+
+# Detach: Ctrl+B, D
+```
+
+Uses the same `train_step5.py` script (ReduceLROnPlateau, lr=5e-4, patience=2).
+Starting from step 4 epoch 24 (61.0% val_top1) rather than step 5, since step 5
+barely improved generalization.
+
+**Retrieve results:**
+
+```bash
+# From LOCAL machine:
+gcloud compute scp --recurse \
+    <vm-name>:~/chess-nanozero/checkpoints/step6/ \
+    checkpoints/step6/ \
+    --zone=<zone>
+
+gcloud compute scp \
+    "<vm-name>:~/chess-nanozero/logs/step5_medium_5m_*.csv" \
+    logs/ \
+    --zone=<zone>
+
+# Copy best checkpoint as medium2.pt if it beats 61%
+gcloud compute scp \
+    <vm-name>:~/chess-nanozero/checkpoints/step6/epoch_XXXX.pt \
+    models/medium2.pt \
+    --zone=<zone>
+```
+
+**Expected runtime:** ~1.7 hrs extraction + ~1.7 hrs training = ~3.5 hrs total.
+**Expected cost:** ~$2.50 (L4 at $0.70/hr).
 
 ---
 

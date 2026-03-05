@@ -27,6 +27,13 @@ Usage examples:
       --pgn data/lichess_elite/lichess_elite_2025-11.pgn \\
       --output data/lichess_elite/sample_5m.npz \\
       --max-positions 5000000
+
+  # Step 6: next 5M positions (guaranteed non-overlapping with step 4)
+  python3 scripts/prepare_data.py \\
+      --pgn data/lichess_elite/lichess_elite_2025-11.pgn \\
+      --output data/lichess_elite/sample_5m_b.npz \\
+      --skip-positions 5000000 \\
+      --max-positions 5000000
 """
 
 from __future__ import annotations
@@ -50,6 +57,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-games", type=int, default=None,
         help="Stop after parsing this many games (alternative limit)"
+    )
+    parser.add_argument(
+        "--skip-positions", type=int, default=0,
+        help="Skip this many positions before recording. Use to extract non-overlapping "
+             "batches from the same PGN (e.g. --skip-positions 5000000 to start where "
+             "a prior 5M extraction left off)."
     )
     parser.add_argument(
         "--skip-first-n-moves", type=int, default=6,
@@ -95,6 +108,8 @@ def main() -> None:
 
     print(f"Parsing {args.pgn} ...")
     print(f"  skip_first_n_moves = {args.skip_first_n_moves}")
+    if args.skip_positions:
+        print(f"  skip_positions     = {args.skip_positions:,}")
     if max_pos:
         print(f"  max_positions      = {max_pos:,}")
     if args.max_games:
@@ -116,6 +131,7 @@ def main() -> None:
     for encoding, move_idx, value in stream_pgn_positions(
         args.pgn,
         skip_first_n_moves=args.skip_first_n_moves,
+        skip_positions=args.skip_positions,
         max_games=args.max_games,
         max_positions=max_pos,
     ):

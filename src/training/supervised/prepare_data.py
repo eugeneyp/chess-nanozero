@@ -20,6 +20,7 @@ from src.game.encoding import encode_board, move_to_index
 def stream_pgn_positions(
     pgn_path: str | Path | io.StringIO,
     skip_first_n_moves: int = 6,
+    skip_positions: int = 0,
     max_games: int | None = None,
     max_positions: int | None = None,
 ):
@@ -29,6 +30,12 @@ def stream_pgn_positions(
         (board_encoding, move_index, value) triples (same format as
         parse_pgn_to_positions) without building an in-memory list.
         Use this for large extractions to avoid OOM.
+
+    Args:
+        skip_positions: Skip this many positions before yielding. Use this to
+            extract non-overlapping batches from the same PGN file, e.g.
+            skip_positions=5_000_000 to start exactly where a prior 5M extraction
+            left off.
     """
     if isinstance(pgn_path, (str, Path)):
         pgn_file = open(pgn_path, encoding="utf-8", errors="ignore")
@@ -38,6 +45,7 @@ def stream_pgn_positions(
         should_close = False
 
     games_parsed = 0
+    positions_skipped = 0
     positions_yielded = 0
 
     try:
@@ -70,11 +78,14 @@ def stream_pgn_positions(
                     break
 
                 if ply >= skip_first_n_moves:
-                    value = white_result if board.turn == chess.WHITE else -white_result
-                    encoding = encode_board(board)
-                    move_idx = move_to_index(move, board)
-                    yield (encoding, move_idx, float(value))
-                    positions_yielded += 1
+                    if positions_skipped < skip_positions:
+                        positions_skipped += 1
+                    else:
+                        value = white_result if board.turn == chess.WHITE else -white_result
+                        encoding = encode_board(board)
+                        move_idx = move_to_index(move, board)
+                        yield (encoding, move_idx, float(value))
+                        positions_yielded += 1
 
                 board.push(move)
                 ply += 1
