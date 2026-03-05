@@ -16,7 +16,6 @@ from pathlib import Path
 
 import chess
 import numpy as np
-import torch
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -26,7 +25,6 @@ from pydantic import BaseModel, field_validator
 from src.agents.alphazero_agent import AlphaZeroAgent
 from src.game.chess_game import ChessGame
 from src.game.encoding import encode_board, get_legal_move_mask, index_to_move
-from src.neural_net.model import masked_policy_probs
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -143,16 +141,26 @@ def api_move(request: MoveRequest) -> MoveResponse:
 
 def _policy_move(board: chess.Board, agent: AlphaZeroAgent) -> tuple[chess.Move, float]:
     """Pick best move using the policy head only — no MCTS tree search."""
+    from src.mcts.mcts import _softmax_masked
     encoding = encode_board(board)
-    board_t = torch.frombuffer(encoding.tobytes(), dtype=torch.float32).reshape(1, 18, 8, 8)
-    with torch.no_grad():
-        policy_logits, _ = agent.mcts.model(board_t)
     mask = get_legal_move_mask(board)
-    mask_t = torch.frombuffer(mask.tobytes(), dtype=torch.uint8).bool()
-    probs_t = masked_policy_probs(policy_logits[0], mask_t)
-    best_idx = int(probs_t.argmax().item())
-    best_move = index_to_move(best_idx, board)
-    return best_move, float(probs_t[best_idx].item())
+    if isinstance(agent.mcts, __import__('src.mcts.mcts', fromlist=['OnnxMCTS']).OnnxMCTS):
+        # ONNX path
+        policy_np, _ = agent.mcts.sess.run(None, {agent.mcts.input_name: encoding[np.newaxis]})
+        probs = _softmax_masked(policy_np[0], mask)
+        best_idx = int(probs.argmax())
+        return index_to_move(best_idx, board), float(probs[best_idx])
+    else:
+        # PyTorch path (lazy import to avoid numpy/torch compat issue at startup)
+        import torch
+        from src.neural_net.model import masked_policy_probs
+        board_t = torch.frombuffer(encoding.tobytes(), dtype=torch.float32).reshape(1, 18, 8, 8)
+        with torch.no_grad():
+            policy_logits, _ = agent.mcts.model(board_t)
+        mask_t = torch.frombuffer(mask.tobytes(), dtype=torch.uint8).bool()
+        probs_t = masked_policy_probs(policy_logits[0], mask_t)
+        best_idx = int(probs_t.argmax().item())
+        return index_to_move(best_idx, board), float(probs_t[best_idx].item())
 
 
 @app.get("/", include_in_schema=False)
