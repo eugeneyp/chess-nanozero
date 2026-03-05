@@ -2,15 +2,14 @@
 # run_tournament.sh — chess-nanozero vs Stockfish benchmarking
 #
 # Usage:
-#   ./tools/run_tournament.sh [rounds=10] [sf_elo=1320] [tc_base=60] [tc_inc=1] [checkpoint=...] [onnx=...]
+#   ./tools/run_tournament.sh [rounds=10] [sf_elo=1320] [tc_base=60] [tc_inc=1] [checkpoint=...]
 #
 # Examples:
 #   ./tools/run_tournament.sh                              # 20 games smoke test
 #   ./tools/run_tournament.sh 25                           # 50 games ELO estimate
 #   ./tools/run_tournament.sh 25 1700                      # vs Stockfish 1700
 #   ./tools/run_tournament.sh 10 1320 120 2                # 2-min game + 2s increment
-#   ./tools/run_tournament.sh 5 1500 60 1 models/medium1.pt           # custom checkpoint
-#   ./tools/run_tournament.sh 25 1700 60 1 "" models/medium1.onnx     # ONNX inference
+#   ./tools/run_tournament.sh 5 1500 60 1 checkpoints/step6/epoch_0010.pt  # custom checkpoint
 #
 # ELO formula (printed after run):
 #   Elo ≈ opponent_elo − 400 × log10((1 − score%) / score%)
@@ -34,10 +33,8 @@ else
     CHECKPOINT="${PROJECT_DIR}/checkpoints/step4/epoch_0024.pt"
 fi
 
-# 6th arg: ONNX model path (relative to PROJECT_DIR); if set, use ONNX Runtime
-ONNX_MODEL="${6:-}"
-
 CONFIG="${PROJECT_DIR}/configs/medium.yaml"
+OPENING_BOOK="${PROJECT_DIR}/data/openings/UHO_4060_v4.epd"
 RESULTS_DIR="${PROJECT_DIR}/results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 PGN_OUT="${RESULTS_DIR}/vs_sf${SF_ELO}_${TIMESTAMP}.pgn"
@@ -49,26 +46,16 @@ echo "======================================================"
 echo " chess-nanozero vs Stockfish ${SF_ELO}"
 echo " Rounds: ${ROUNDS} (${TOTAL_GAMES} games, -repeat)"
 echo " Time control: ${TC_BASE}s + ${TC_INC}s/move"
-if [ -n "$ONNX_MODEL" ]; then
-    echo " Inference:  ONNX (${PROJECT_DIR}/${ONNX_MODEL})"
-else
-    echo " Checkpoint: ${CHECKPOINT}"
-fi
-echo " PGN output: ${PGN_OUT}"
+echo " Checkpoint:   ${CHECKPOINT}"
+echo " Opening book: ${OPENING_BOOK}"
+echo " PGN output:   ${PGN_OUT}"
 echo "======================================================"
 
 # Note: fastchess treats cmd= as a binary path only; use args= for arguments.
 # Also, fastchess has a bug with RLIM_INFINITY - set a concrete fd limit.
 ulimit -n 4096 2>/dev/null || true
 
-# Build engine args depending on PyTorch vs ONNX mode
-if [ -n "$ONNX_MODEL" ]; then
-    ENGINE_ARGS="-u ${PROJECT_DIR}/scripts/play_uci.py --config ${CONFIG} --onnx-model ${PROJECT_DIR}/${ONNX_MODEL}"
-    ENGINE_NAME="nanozero-onnx"
-else
-    ENGINE_ARGS="-u ${PROJECT_DIR}/scripts/play_uci.py --config ${CONFIG} --checkpoint ${CHECKPOINT}"
-    ENGINE_NAME="nanozero"
-fi
+ENGINE_ARGS="-u ${PROJECT_DIR}/scripts/play_uci.py --config ${CONFIG} --checkpoint ${CHECKPOINT}"
 
 # Use python -u for unbuffered stdout — required so bestmove reaches fastchess
 # without block-buffer delay.  timemargin=500 gives Stockfish 500ms grace.
@@ -76,13 +63,14 @@ fi
     -engine \
         cmd="python" \
         "args=${ENGINE_ARGS}" \
-        name="${ENGINE_NAME}" \
+        name="nanozero" \
     -engine \
         cmd="$STOCKFISH" \
         name="stockfish-${SF_ELO}" \
         option.UCI_LimitStrength=true \
         option.UCI_Elo=${SF_ELO} \
     -each tc=${TC_BASE}+${TC_INC} timemargin=500 \
+    -openings file="${OPENING_BOOK}" format=epd order=random \
     -rounds ${ROUNDS} \
     -repeat \
     -recover \
