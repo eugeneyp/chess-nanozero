@@ -28,7 +28,10 @@ parser.add_argument("--checkpoint", default="checkpoints/step4/epoch_0024.pt")
 parser.add_argument("--device", default="cpu")
 parser.add_argument("--num-simulations", type=int, default=None,
                     help="Override mcts.num_simulations from config")
+parser.add_argument("--onnx-model", default=None,
+                    help="Path to .onnx model file; uses ONNX Runtime instead of PyTorch")
 args = parser.parse_args()
 
-engine = UCIEngine(args.config, args.checkpoint, args.device, args.num_simulations)
+engine = UCIEngine(args.config, args.checkpoint, args.device, args.num_simulations,
+                   onnx_path=args.onnx_model)
 run_uci_loop(engine)

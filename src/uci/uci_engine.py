@@ -39,11 +39,13 @@ class UCIEngine:
         checkpoint_path: str,
         device: str = "cpu",
         num_simulations: Optional[int] = None,
+        onnx_path: Optional[str] = None,
     ) -> None:
         self.config_path = config_path
         self.checkpoint_path = checkpoint_path
         self.device = device
         self.num_simulations_override = num_simulations
+        self.onnx_path = onnx_path
         self.agent: Optional[AlphaZeroAgent] = None  # lazy-loaded on isready
         self.board = chess.Board()
         self.search_thread: Optional[threading.Thread] = None
@@ -60,22 +62,32 @@ class UCIEngine:
 
     def handle_isready(self) -> None:
         if self.agent is None:
-            _log(f"Loading model from {self.checkpoint_path} …")
             config = yaml.safe_load(open(self.config_path))
             if self.num_simulations_override is not None:
                 config["mcts"]["num_simulations"] = self.num_simulations_override
-            self.agent = AlphaZeroAgent.from_checkpoint(
-                Path(self.checkpoint_path), config, self.device
-            )
+
+            if self.onnx_path is not None:
+                # ONNX mode: build agent from config only (no checkpoint weights needed),
+                # then swap the PyTorch model for an ONNX Runtime session.
+                _log(f"Loading ONNX model from {self.onnx_path} …")
+                from src.neural_net.model import ChessResNet
+                from src.neural_net.onnx_model import OnnxModel
+                dummy_model = ChessResNet.from_config(config)
+                self.agent = AlphaZeroAgent(dummy_model, config, self.device)
+                self.agent.mcts.model = OnnxModel(self.onnx_path, self.device)
+            else:
+                _log(f"Loading model from {self.checkpoint_path} …")
+                self.agent = AlphaZeroAgent.from_checkpoint(
+                    Path(self.checkpoint_path), config, self.device
+                )
+
             # On macOS, PyTorch's OpenMP threads run slower when spawned from
             # a non-main Python thread (daemon thread scheduling).
             # torch.set_num_threads(1) reduces the overhead (~3x improvement).
             import torch
             torch.set_num_threads(1)
 
-            # Warmup forward pass — eliminates PyTorch first-call overhead.
-            # Use frombuffer path to match the exact code path MCTS uses in
-            # _expand (torch.zeros uses a different kernel than frombuffer).
+            # Warmup forward pass — eliminates first-call overhead.
             _log("Warming up …")
             from src.game.encoding import NUM_PLANES
             import numpy as np

@@ -144,7 +144,8 @@ result) triples -> skip first 6 moves -> encode -> store as .npz
 - Best val_top1: 61.0% at epoch 24 (`epoch_0024.pt`)
 - Final val_top1: 60.4% at epoch 30 (slight overfit after epoch 24)
 - Final val_top5: 92.6%
-- Val metrics were noisy (periodic spikes at epochs 10, 16, 21, 24, 27 — cosine LR warmup cycles)
+- Log: /logs/step4_medium_5m.csv
+- Detailed analysis: /logs/step4_medium_5m_analysis.md
 - **Best checkpoint for inference: `checkpoints/step4/epoch_0024.pt`**
 
 ---
