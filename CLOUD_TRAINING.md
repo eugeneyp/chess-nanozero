@@ -236,21 +236,21 @@ Dataset is effectively exhausted — step 6 trains on fresh positions from the s
 
 ---
 
-### Step 6: Train on fresh 5M positions (non-overlapping with step 4)
+### Step 6: Train on all remaining positions in the PGN (~15.6M)
 
-**Purpose:** The same PGN file has ~15M positions total; step 4 used only the first 5M.
-Training on the next 5M gives the model data it has never seen, which should yield
-step-4-scale improvements.
+**Purpose:** The same PGN file has ~15.6M positions total; step 4 used only the first 5M
+(~68K games). Training on all remaining ~212K games gives the model 3x more fresh data
+it has never seen, which should yield substantial ELO gains toward 2000.
 
-**Step 1: Extract the next 5M positions** (on the VM, ~15-20 min):
+**Step 1: Extract all remaining positions** (on the VM, ~30 min):
 
 ```bash
 python3 scripts/prepare_data.py \
     --pgn data/lichess_elite/lichess_elite_2025-11.pgn \
-    --output data/lichess_elite/sample_5m_b.npz \
-    --skip-positions 5000000 \
-    --max-positions 5000000
-# Produces: sample_5m_b_part001.npz ... sample_5m_b_part010.npz
+    --output data/lichess_elite/sample_rest.npz \
+    --skip-positions 5000000
+# No --max-positions = extract everything remaining (~15.6M positions)
+# Produces: sample_rest_part001.npz ... sample_rest_part031.npz (~31 chunks)
 ```
 
 `--skip-positions 5000000` fast-forwards past exactly the positions used in step 4,
@@ -263,15 +263,16 @@ tmux new -s step6
 
 python3 scripts/train_step5.py \
     --checkpoint checkpoints/step4/epoch_0024.pt \
-    --data data/lichess_elite/sample_5m_b_part*.npz \
-    --checkpoint-dir checkpoints/step6/
+    --data data/lichess_elite/sample_rest_part*.npz \
+    --checkpoint-dir checkpoints/step6/ \
+    --num-epochs 20 \
+    --log-file logs/step6_medium_rest.csv
 
 # Detach: Ctrl+B, D
 ```
 
-Uses the same `train_step5.py` script (ReduceLROnPlateau, lr=5e-4, patience=2).
-Starting from step 4 epoch 24 (61.0% val_top1) rather than step 5, since step 5
-barely improved generalization.
+Uses `train_step5.py` (ReduceLROnPlateau, lr=5e-4, patience=2).
+Starting from step 4 epoch 24 (61.0% val_top1) — not step 5, which barely improved.
 
 **Retrieve results:**
 
@@ -283,7 +284,7 @@ gcloud compute scp --recurse \
     --zone=<zone>
 
 gcloud compute scp \
-    "<vm-name>:~/chess-nanozero/logs/step5_medium_5m_*.csv" \
+    <vm-name>:~/chess-nanozero/logs/step6_medium_rest.csv \
     logs/ \
     --zone=<zone>
 
@@ -294,8 +295,8 @@ gcloud compute scp \
     --zone=<zone>
 ```
 
-**Expected runtime:** ~1.7 hrs extraction + ~1.7 hrs training = ~3.5 hrs total.
-**Expected cost:** ~$2.50 (L4 at $0.70/hr).
+**Expected runtime:** ~30 min extraction + ~10 hrs training (20 epochs × 15.6M positions).
+**Expected cost:** ~$7.50 (L4 at $0.70/hr × ~10.5 hrs).
 
 ---
 
@@ -320,14 +321,16 @@ gcloud compute scp \
 
 ## Cost Estimates
 
-| Step | Model  | Data  | Epochs | Time est.          | L4 cost |
-|------|--------|-------|--------|--------------------|---------|
-| 3    | medium | 50K   | varies | ~15 min            | <$0.20  |
-| 4    | medium | 5M    | 30     | ~5 hrs @ 8758 s/s  | ~$3.50  |
-| 5    | medium | 5M    | 10     | ~1.7 hrs @ 8758 s/s | ~$1.20  |
+| Step | Model  | Data   | Epochs | Time est.           | L4 cost |
+|------|--------|--------|--------|---------------------|---------|
+| 3    | medium | 50K    | varies | ~15 min             | <$0.20  |
+| 4    | medium | 5M     | 30     | ~5 hrs @ 8758 s/s   | ~$3.50  |
+| 5    | medium | 5M     | 10     | ~1.7 hrs @ 8758 s/s | ~$1.20  |
+| 6    | medium | 15.6M  | 20     | ~10.5 hrs @ 8880 s/s | ~$7.50  |
 
 Calculation for Step 4: 5M × 30 epochs / 8,758 samp/s ≈ 4 hrs 45 min + overhead.
 Calculation for Step 5: 5M × 10 epochs / 8,758 samp/s ≈ 1 hr 35 min + overhead.
+Calculation for Step 6: 15.6M × 20 epochs / 8,880 samp/s ≈ 9.7 hrs + ~30 min extraction.
 
 Stop the VM (not delete) between sessions to avoid idle charges:
 
