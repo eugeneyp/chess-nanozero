@@ -215,6 +215,12 @@ gcloud compute scp --recurse \
     checkpoints/step5/ \
     --zone=<zone>
 
+# Copy training CSV log (epoch-by-epoch metrics)
+gcloud compute scp \
+    "<vm-name>:~/chess-nanozero/logs/step5_medium_5m_*.csv" \
+    logs/ \
+    --zone=<zone>
+
 # Copy best checkpoint as medium2.pt if it beats 61%
 gcloud compute scp \
     <vm-name>:~/chess-nanozero/checkpoints/step5/epoch_XXXX.pt \
