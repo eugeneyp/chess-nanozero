@@ -172,13 +172,15 @@ class UCIEngine:
                     game, temperature=0.0, add_noise=False, deadline=deadline
                 )
                 sims = self.agent.mcts.root.visit_count
-                _log(f"sims={sims} budget={f'{time_budget:.2f}s' if time_budget else 'inf'}")
+                q = self.agent.mcts.root.q_value          # [-1, 1] current player
+                cp = int(q * 100)                          # centipawns (linear approx)
+                _log(f"sims={sims} q={q:.3f} cp={cp} budget={f'{time_budget:.2f}s' if time_budget else 'inf'}")
                 if probs:
                     move = max(probs, key=probs.get)
-                    _send(f"info depth 1 score cp 0 nodes {sims}")
+                    _send(f"info depth {sims} score cp {cp} nodes {sims}")
                     _send(f"bestmove {move.uci()}")
                 else:
-                    _send(f"info depth 1 score cp 0 nodes {sims}")
+                    _send(f"info depth {sims} score cp {cp} nodes {sims}")
                     _send("bestmove 0000")
             except Exception as exc:  # pragma: no cover
                 _log(f"Search error: {exc}")
