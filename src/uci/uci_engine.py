@@ -171,12 +171,14 @@ class UCIEngine:
                 probs = self.agent.mcts.get_action_probs(
                     game, temperature=0.0, add_noise=False, deadline=deadline
                 )
+                sims = self.agent.mcts.root.visit_count
+                _log(f"sims={sims} budget={f'{time_budget:.2f}s' if time_budget else 'inf'}")
                 if probs:
                     move = max(probs, key=probs.get)
-                    _send("info depth 1 score cp 0 nodes 1")
+                    _send(f"info depth 1 score cp 0 nodes {sims}")
                     _send(f"bestmove {move.uci()}")
                 else:
-                    _send("info depth 1 score cp 0 nodes 1")
+                    _send(f"info depth 1 score cp 0 nodes {sims}")
                     _send("bestmove 0000")
             except Exception as exc:  # pragma: no cover
                 _log(f"Search error: {exc}")
