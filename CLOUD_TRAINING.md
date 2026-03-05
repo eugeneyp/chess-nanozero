@@ -162,9 +162,68 @@ gcloud compute ssh <vm-name> --zone=<zone> -- \
 
 **Expected runtime:** 8–24 hrs on L4 (depends on speed measured in Step 3).
 
-**Gate (from CLAUDE.md):**
-- Policy top-1 accuracy: 30–40% on val
-- Policy top-5 accuracy: 60–70% on val
+**Actual Step 4 results (2026-03-04, L4 GPU):**
+- Speed: ~8,765 samp/s, ~10.7 min/epoch, ~5 hrs 12 min total (30 epochs)
+- Best val_top1: **61.0%** at epoch 24 (`checkpoints/step4/epoch_0024.pt`)
+- Final val_top1: 60.4% at epoch 30 (slight overfit after epoch 24)
+- Best checkpoint saved as `models/medium1.pt`
+
+---
+
+### Step 5: Fine-tune on same 5M dataset with ReduceLROnPlateau
+
+**Purpose:** Test whether the model has exhausted learning on the 5M dataset.
+Loads weights only from step 4's best checkpoint; fresh optimizer at lower LR.
+Uses `ReduceLROnPlateau` (adaptive) instead of cosine annealing (fixed schedule).
+
+**Prerequisites:** Same 5M chunk files on VM from Step 4. Pull latest code first:
+
+```bash
+git pull  # get scripts/train_step5.py
+```
+
+**Run Step 5:**
+
+```bash
+tmux new -s step5
+
+python3 scripts/train_step5.py \
+    --checkpoint checkpoints/step4/epoch_0024.pt \
+    --data data/lichess_elite/sample_5m_part*.npz \
+    --checkpoint-dir checkpoints/step5/
+
+# Detach: Ctrl+B, D
+```
+
+**Key hyperparameters:**
+- LR: 5e-4 (lower than step 4's 1e-3; model already near convergence)
+- Patience: 2 (halve LR after 2 epochs with no val_top1 improvement)
+- Factor: 0.5 (LR schedule: 5e-4 → 2.5e-4 → 1.25e-4 ...)
+- Epochs: 10
+
+**What to watch:**
+- `★` in output marks best val_top1 epoch
+- If val_top1 never exceeds 61.0% (step 4 best) → dataset is exhausted, get more data
+- If val_top1 improves → keep training or expand to more data at higher LR
+
+**Retrieve results:**
+
+```bash
+# From LOCAL machine:
+gcloud compute scp --recurse \
+    <vm-name>:~/chess-nanozero/checkpoints/step5/ \
+    checkpoints/step5/ \
+    --zone=<zone>
+
+# Copy best checkpoint as medium2.pt if it beats 61%
+gcloud compute scp \
+    <vm-name>:~/chess-nanozero/checkpoints/step5/epoch_XXXX.pt \
+    models/medium2.pt \
+    --zone=<zone>
+```
+
+**Expected runtime:** ~5 hrs (same dataset/speed as Step 4, 10 epochs instead of 30).
+**Expected cost:** ~$3.50 (L4 at $0.70/hr × 5 hrs).
 
 ---
 
@@ -189,12 +248,14 @@ gcloud compute scp \
 
 ## Cost Estimates
 
-| Step | Model  | Data  | Time est.        | L4 cost |
-|------|--------|-------|------------------|---------|
-| 3    | medium | 50K   | ~15 min          | <$0.20  |
-| 4    | medium | 5M    | ~5 hrs @ 8758 s/s | ~$3.50  |
+| Step | Model  | Data  | Epochs | Time est.          | L4 cost |
+|------|--------|-------|--------|--------------------|---------|
+| 3    | medium | 50K   | varies | ~15 min            | <$0.20  |
+| 4    | medium | 5M    | 30     | ~5 hrs @ 8758 s/s  | ~$3.50  |
+| 5    | medium | 5M    | 10     | ~1.7 hrs @ 8758 s/s | ~$1.20  |
 
-Calculation for Step 4: 5M × 30 epochs / 8,758 samp/s ≈ 4 hrs 45 min + ~10 min chunk-load overhead.
+Calculation for Step 4: 5M × 30 epochs / 8,758 samp/s ≈ 4 hrs 45 min + overhead.
+Calculation for Step 5: 5M × 10 epochs / 8,758 samp/s ≈ 1 hr 35 min + overhead.
 
 Stop the VM (not delete) between sessions to avoid idle charges:
 
