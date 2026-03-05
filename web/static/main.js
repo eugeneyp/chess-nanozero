@@ -21,14 +21,46 @@ let game = new Chess();
 /** chessboard.js board instance — visual only */
 let board = null;
 
-/** Blocks clicks while the engine is searching */
+/** Blocks interaction while the engine is searching */
 let isThinking = false;
 
-/** Currently selected square (click-to-move state machine) */
+/** Currently selected square (click-to-move state machine, mobile only) */
 let selectedSquare = null;
+
+/**
+ * True on touch/mobile devices (coarse pointer), false on desktop (fine pointer/mouse).
+ * Determines whether to use click-to-move or drag-and-drop.
+ */
+const isMobile = window.matchMedia('(pointer: coarse)').matches;
 
 // ---------------------------------------------------------------------------
 // chessboard.js callbacks
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop callbacks (desktop only)
+// ---------------------------------------------------------------------------
+
+function onDragStart(source, piece) {
+  if (isThinking) return false;
+  if (game.game_over()) return false;
+  if (piece.startsWith('b')) return false;
+  return true;
+}
+
+function onDrop(source, target) {
+  const move = game.move({ from: source, to: target, promotion: 'q' });
+  if (move === null) return 'snapback';
+  updateStatus();
+  if (!game.game_over()) requestEngineMove();
+}
+
+function onSnapEnd() {
+  board.position(game.fen());
+}
+
+// ---------------------------------------------------------------------------
+// Click-to-move callbacks (mobile only)
 // ---------------------------------------------------------------------------
 
 /**
@@ -214,8 +246,7 @@ function takeBack() {
 
   game.undo(); // removes engine's last move
   game.undo(); // removes player's last move
-  clearHighlights();
-  selectedSquare = null;
+  if (isMobile) { clearHighlights(); selectedSquare = null; }
   board.position(game.fen());
   updateStatus();
 }
@@ -226,8 +257,7 @@ function takeBack() {
 function newGame() {
   game.reset();
   board.start();
-  clearHighlights();
-  selectedSquare = null;
+  if (isMobile) { clearHighlights(); selectedSquare = null; }
   isThinking = false;
   document.getElementById('sims-value').textContent = '—';
   setStatus('Your turn');
@@ -239,27 +269,38 @@ function newGame() {
 
 /**
  * Initialise chessboard.js once the DOM is ready.
- * The board is configured for White at the bottom with click-to-move enabled.
+ * Desktop: drag-and-drop. Mobile (coarse pointer): click-to-move.
  */
 $(document).ready(function () {
-  const config = {
-    draggable: false,
-    position: 'start',
-    pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
-  };
+  const config = isMobile
+    ? {
+        draggable: false,
+        position: 'start',
+        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+      }
+    : {
+        draggable: true,
+        position: 'start',
+        onDragStart: onDragStart,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd,
+        pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+      };
 
   board = Chessboard('board', config);
 
-  // Click-to-move: event delegation on the board container.
+  // Click-to-move: event delegation on the board container (mobile only).
   // chessboard.js does not support onSquareClick, so we listen on #board
   // and find the clicked square via its data-square attribute.
-  document.getElementById('board').addEventListener('click', function(e) {
-    const squareEl = e.target.closest('[data-square]');
-    if (!squareEl) return;
-    const square = squareEl.dataset.square;
-    const p = game.get(square);
-    onSquareClick(square, pieceString(p));
-  });
+  if (isMobile) {
+    document.getElementById('board').addEventListener('click', function(e) {
+      const squareEl = e.target.closest('[data-square]');
+      if (!squareEl) return;
+      const square = squareEl.dataset.square;
+      const p = game.get(square);
+      onSquareClick(square, pieceString(p));
+    });
+  }
 
   // Wire up buttons
   document.getElementById('take-back-btn').addEventListener('click', takeBack);
