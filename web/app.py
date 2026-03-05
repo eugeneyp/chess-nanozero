@@ -50,7 +50,7 @@ def get_agent() -> AlphaZeroAgent:
     global _agent
     if _agent is None:
         config_path = os.environ.get("CHESS_CONFIG", "configs/medium.yaml")
-        checkpoint_path = os.environ.get("CHESS_CHECKPOINT", "models/medium1.pt")
+        checkpoint_path = os.environ.get("CHESS_CHECKPOINT", "models/medium1.onnx")
         num_simulations = int(os.environ.get("NUM_SIMULATIONS", "400"))
 
         _log.info("Loading config from %s", config_path)
@@ -58,10 +58,13 @@ def get_agent() -> AlphaZeroAgent:
         config.setdefault("mcts", {})["num_simulations"] = num_simulations
 
         _log.info("Loading checkpoint from %s", checkpoint_path)
-        _agent = AlphaZeroAgent.from_checkpoint(
-            Path(checkpoint_path), config, device="cpu"
-        )
-        _log.info("Agent ready.")
+        if checkpoint_path.endswith(".onnx"):
+            _agent = AlphaZeroAgent.from_onnx(Path(checkpoint_path), config)
+        else:
+            _agent = AlphaZeroAgent.from_checkpoint(
+                Path(checkpoint_path), config, device="cpu"
+            )
+        _log.info("Agent ready (%s).", "ONNX" if checkpoint_path.endswith(".onnx") else "PyTorch")
     return _agent
 
 

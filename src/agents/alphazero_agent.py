@@ -9,7 +9,7 @@ import chess
 import torch
 
 from src.game.chess_game import ChessGame
-from src.mcts.mcts import MCTS
+from src.mcts.mcts import MCTS, OnnxMCTS
 from src.neural_net.model import ChessResNet
 
 
@@ -31,6 +31,16 @@ class AlphaZeroAgent:
         model.to(device)
         model.eval()
         return cls(model, config, device)
+
+    @classmethod
+    def from_onnx(cls, onnx_path: Path, config: dict) -> "AlphaZeroAgent":
+        """Load ONNX model for faster CPU inference (no PyTorch overhead)."""
+        import onnxruntime as ort
+        sess = ort.InferenceSession(str(onnx_path))
+        agent = cls.__new__(cls)
+        agent.mcts = OnnxMCTS(sess, config)
+        agent.temp_threshold = config.get("mcts", {}).get("temperature_threshold_move", 30)
+        return agent
 
     def select_move(
         self, game: ChessGame, move_number: int = 0, add_noise: bool = False

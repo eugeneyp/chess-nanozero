@@ -16,6 +16,15 @@ from src.mcts.node import MCTSNode
 from src.neural_net.model import ChessResNet, masked_policy_probs
 
 
+def _softmax_masked(logits: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Apply mask (True = legal) then softmax. Pure numpy, no torch."""
+    logits = logits.copy()
+    logits[~mask] = -np.inf
+    logits -= logits.max()
+    exp = np.exp(logits)
+    return exp / exp.sum()
+
+
 class MCTS:
     """MCTS with neural network guidance (PUCT selection).
 
@@ -127,3 +136,35 @@ class MCTS:
             return {m: (1.0 if m == best else 0.0) for m in counts}
         total = sum(counts.values()) or 1
         return {m: n / total for m, n in counts.items()}
+
+
+class OnnxMCTS(MCTS):
+    """MCTS using ONNX Runtime for inference — faster than PyTorch on CPU."""
+
+    def __init__(self, sess, config: dict):
+        # Skip parent __init__ (no torch model); set fields manually.
+        self.sess = sess
+        self.input_name = sess.get_inputs()[0].name
+        mcts_cfg = config.get("mcts", {})
+        self.num_simulations = mcts_cfg.get("num_simulations", 400)
+        self.c_puct = mcts_cfg.get("c_puct", 2.0)
+        self.dirichlet_alpha = mcts_cfg.get("dirichlet_alpha", 0.3)
+        self.dirichlet_epsilon = mcts_cfg.get("dirichlet_epsilon", 0.25)
+
+    def _expand(self, node: MCTSNode) -> float:
+        """Evaluate with ONNX Runtime, create children, mark expanded."""
+        encoding = node.game.encode()  # (18,8,8) float32
+        policy_np, value_np = self.sess.run(
+            None, {self.input_name: encoding[np.newaxis]}
+        )  # (1,4672), (1,1)
+
+        mask = get_legal_move_mask(node.game.board)  # (4672,) bool
+        probs = _softmax_masked(policy_np[0], mask)  # (4672,) float64
+
+        for move in node.game.get_legal_moves():
+            idx = move_to_index(move, node.game.board)
+            child_game = node.game.make_move(move)
+            node.children[move] = MCTSNode(child_game, prior=float(probs[idx]), parent=node)
+
+        node.is_expanded = True
+        return float(value_np[0, 0])
