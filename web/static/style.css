@@ -224,6 +224,21 @@ footer {
   margin-top: 1rem;
 }
 
+/* --- Square highlights (click-to-move) ----------------------------------- */
+
+.highlight-selected {
+  box-shadow: inset 0 0 0 4px rgba(255, 215, 0, 0.9);
+}
+
+.highlight-legal {
+  box-shadow: inset 0 0 0 4px rgba(0, 200, 80, 0.7);
+}
+
+/* Eliminate 300ms tap delay on mobile */
+#board {
+  touch-action: manipulation;
+}
+
 /* --- Mobile layout ------------------------------------------------------- */
 
 @media (max-width: 640px) {

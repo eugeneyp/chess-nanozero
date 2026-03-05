@@ -21,65 +21,81 @@ let game = new Chess();
 /** chessboard.js board instance — visual only */
 let board = null;
 
-/** Blocks drag-and-drop while the engine is searching */
+/** Blocks clicks while the engine is searching */
 let isThinking = false;
+
+/** Currently selected square (click-to-move state machine) */
+let selectedSquare = null;
 
 // ---------------------------------------------------------------------------
 // chessboard.js callbacks
 // ---------------------------------------------------------------------------
 
 /**
- * Called when the user starts dragging a piece.
- * Returns false to cancel the drag (snap back) if:
- *   - The engine is currently thinking
- *   - The game is over
- *   - The piece belongs to the engine (Black)
- */
-function onDragStart(source, piece) {
-  if (isThinking) return false;
-  if (game.game_over()) return false;
-
-  // Only allow White to drag (player is always White)
-  if (piece.startsWith('b')) return false;
-
-  return true;
-}
-
-/**
- * Called when the user drops a piece on a target square.
- * Validates the move with chess.js and triggers the engine response.
+ * Core click-to-move state machine.
+ * Called by the #board click handler with the algebraic square and piece string.
  *
- * @param {string} source - Origin square (e.g. "e2")
- * @param {string} target - Destination square (e.g. "e4")
- * @returns {string|undefined} 'snapback' if the move is illegal, else undefined
+ * @param {string} square - The clicked square (e.g. "e2")
+ * @param {string|null} piece - chessboard.js piece string (e.g. "wP") or null
  */
-function onDrop(source, target) {
-  // Attempt the move — always auto-promote to queen for simplicity.
-  // chess.js returns null if the move is illegal.
-  const move = game.move({
-    from: source,
-    to: target,
-    promotion: 'q',
-  });
+function onSquareClick(square, piece) {
+  if (isThinking || game.game_over()) return;
 
-  if (move === null) {
-    return 'snapback';
-  }
-
-  updateStatus();
-
-  // If the game isn't over after our move, ask the engine to respond
-  if (!game.game_over()) {
-    requestEngineMove();
+  if (selectedSquare === null) {
+    // Phase 1: select own piece
+    if (!piece || piece.startsWith('b')) return;
+    selectedSquare = square;
+    highlightSquare(square, 'selected');
+    game.moves({ square: square, verbose: true })
+        .forEach(function(m) { highlightSquare(m.to, 'legal'); });
+  } else {
+    // Phase 2: destination click
+    const legalDests = game.moves({ square: selectedSquare, verbose: true })
+                           .map(function(m) { return m.to; });
+    if (legalDests.includes(square)) {
+      // Valid destination → make move (auto-promote to queen)
+      game.move({ from: selectedSquare, to: square, promotion: 'q' });
+      clearHighlights();
+      selectedSquare = null;
+      board.position(game.fen());
+      updateStatus();
+      if (!game.game_over()) requestEngineMove();
+    } else if (piece && piece.startsWith('w')) {
+      // Clicked another own piece → switch selection
+      clearHighlights();
+      selectedSquare = square;
+      highlightSquare(square, 'selected');
+      game.moves({ square: square, verbose: true })
+          .forEach(function(m) { highlightSquare(m.to, 'legal'); });
+    } else {
+      // Clicked empty/opponent square → cancel
+      clearHighlights();
+      selectedSquare = null;
+    }
   }
 }
 
 /**
- * Called after a snap-back animation completes — syncs the visual board
- * to the chess.js game state (no-op in normal play, ensures consistency).
+ * Convert a chess.js piece object to a chessboard.js piece string.
+ * chess.js: { type: 'p', color: 'w' } → chessboard.js: 'wP'
  */
-function onSnapEnd() {
-  board.position(game.fen());
+function pieceString(p) {
+  if (!p) return null;
+  return p.color + p.type.toUpperCase();
+}
+
+// ---------------------------------------------------------------------------
+// Highlight helpers
+// ---------------------------------------------------------------------------
+
+function highlightSquare(square, type) {
+  const el = document.querySelector('[data-square="' + square + '"]');
+  if (el) el.classList.add('highlight-' + type);
+}
+
+function clearHighlights() {
+  document.querySelectorAll('.highlight-selected, .highlight-legal')
+    .forEach(function(el) { el.classList.remove('highlight-selected', 'highlight-legal'); });
 }
 
 // ---------------------------------------------------------------------------
@@ -198,6 +214,8 @@ function takeBack() {
 
   game.undo(); // removes engine's last move
   game.undo(); // removes player's last move
+  clearHighlights();
+  selectedSquare = null;
   board.position(game.fen());
   updateStatus();
 }
@@ -208,6 +226,8 @@ function takeBack() {
 function newGame() {
   game.reset();
   board.start();
+  clearHighlights();
+  selectedSquare = null;
   isThinking = false;
   document.getElementById('sims-value').textContent = '—';
   setStatus('Your turn');
@@ -219,19 +239,27 @@ function newGame() {
 
 /**
  * Initialise chessboard.js once the DOM is ready.
- * The board is configured for White at the bottom with drag-and-drop enabled.
+ * The board is configured for White at the bottom with click-to-move enabled.
  */
 $(document).ready(function () {
   const config = {
-    draggable: true,
+    draggable: false,
     position: 'start',
-    onDragStart: onDragStart,
-    onDrop: onDrop,
-    onSnapEnd: onSnapEnd,
     pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
   };
 
   board = Chessboard('board', config);
+
+  // Click-to-move: event delegation on the board container.
+  // chessboard.js does not support onSquareClick, so we listen on #board
+  // and find the clicked square via its data-square attribute.
+  document.getElementById('board').addEventListener('click', function(e) {
+    const squareEl = e.target.closest('[data-square]');
+    if (!squareEl) return;
+    const square = squareEl.dataset.square;
+    const p = game.get(square);
+    onSquareClick(square, pieceString(p));
+  });
 
   // Wire up buttons
   document.getElementById('take-back-btn').addEventListener('click', takeBack);
