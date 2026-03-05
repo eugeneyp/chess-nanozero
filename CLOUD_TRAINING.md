@@ -265,7 +265,7 @@ python3 scripts/train_step5.py \
     --checkpoint checkpoints/step4/epoch_0024.pt \
     --data data/lichess_elite/sample_rest_part*.npz \
     --checkpoint-dir checkpoints/step6/ \
-    --num-epochs 20 \
+    --num-epochs 30 \
     --log-file logs/step6_medium_rest.csv
 
 # Detach: Ctrl+B, D
@@ -295,8 +295,8 @@ gcloud compute scp \
     --zone=<zone>
 ```
 
-**Expected runtime:** ~30 min extraction + ~10 hrs training (20 epochs × 15.6M positions).
-**Expected cost:** ~$7.50 (L4 at $0.70/hr × ~10.5 hrs).
+**Expected runtime:** ~30 min extraction + ~14.6 hrs training (30 epochs × 15.6M positions).
+**Expected cost:** ~$10.50 (L4 at $0.70/hr × ~15 hrs).
 
 ---
 
@@ -326,11 +326,11 @@ gcloud compute scp \
 | 3    | medium | 50K    | varies | ~15 min             | <$0.20  |
 | 4    | medium | 5M     | 30     | ~5 hrs @ 8758 s/s   | ~$3.50  |
 | 5    | medium | 5M     | 10     | ~1.7 hrs @ 8758 s/s | ~$1.20  |
-| 6    | medium | 15.6M  | 20     | ~10.5 hrs @ 8880 s/s | ~$7.50  |
+| 6    | medium | 15.6M  | 30     | ~14.6 hrs @ 8880 s/s | ~$10.25 |
 
 Calculation for Step 4: 5M × 30 epochs / 8,758 samp/s ≈ 4 hrs 45 min + overhead.
 Calculation for Step 5: 5M × 10 epochs / 8,758 samp/s ≈ 1 hr 35 min + overhead.
-Calculation for Step 6: 15.6M × 20 epochs / 8,880 samp/s ≈ 9.7 hrs + ~30 min extraction.
+Calculation for Step 6: 15.6M × 30 epochs / 8,880 samp/s ≈ 14.6 hrs + ~30 min extraction.
 
 Stop the VM (not delete) between sessions to avoid idle charges:
 
