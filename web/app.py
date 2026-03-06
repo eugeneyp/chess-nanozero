@@ -48,7 +48,7 @@ def get_agent() -> AlphaZeroAgent:
     global _agent
     if _agent is None:
         config_path = os.environ.get("CHESS_CONFIG", "configs/medium.yaml")
-        checkpoint_path = os.environ.get("CHESS_CHECKPOINT", "models/medium1.onnx")
+        checkpoint_path = os.environ.get("CHESS_CHECKPOINT", "models/medium2.onnx")
         num_simulations = int(os.environ.get("NUM_SIMULATIONS", "400"))
 
         _log.info("Loading config from %s", config_path)
