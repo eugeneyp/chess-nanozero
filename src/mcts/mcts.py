@@ -6,14 +6,12 @@ import time
 from typing import Optional
 
 import numpy as np
-import torch
 
 import chess
 
 from src.game.chess_game import ChessGame
 from src.game.encoding import get_legal_move_mask, move_to_index
 from src.mcts.node import MCTSNode
-from src.neural_net.model import ChessResNet, masked_policy_probs
 
 
 def _softmax_masked(logits: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -91,6 +89,8 @@ class MCTS:
 
     def _expand(self, node: MCTSNode) -> float:
         """Evaluate with network, create children, mark expanded. Returns value."""
+        import torch
+        from src.neural_net.model import masked_policy_probs
         encoding = node.game.encode()  # (18,8,8) float32
         # Use frombuffer to avoid slow numpy→torch conversion path when numpy C API
         # is incompatible with the installed PyTorch version.

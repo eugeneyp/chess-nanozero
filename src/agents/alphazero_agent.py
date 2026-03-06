@@ -6,17 +6,15 @@ import random
 from pathlib import Path
 
 import chess
-import torch
 
 from src.game.chess_game import ChessGame
 from src.mcts.mcts import MCTS, OnnxMCTS
-from src.neural_net.model import ChessResNet
 
 
 class AlphaZeroAgent:
     """Chess agent that uses MCTS guided by a trained ChessResNet."""
 
-    def __init__(self, model: ChessResNet, config: dict, device: str = "cpu"):
+    def __init__(self, model, config: dict, device: str = "cpu"):
         self.mcts = MCTS(model, config, device)
         self.temp_threshold = config.get("mcts", {}).get("temperature_threshold_move", 30)
 
@@ -25,6 +23,8 @@ class AlphaZeroAgent:
         cls, checkpoint_path: Path, config: dict, device: str = "cpu"
     ) -> "AlphaZeroAgent":
         """Load model weights from a checkpoint and construct the agent."""
+        import torch
+        from src.neural_net.model import ChessResNet
         model = ChessResNet.from_config(config)
         ckpt = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(ckpt["model_state_dict"])
