@@ -213,7 +213,7 @@ schedule and data quality matter most for training.
 | 4     | ✅ COMPLETE (2026-03-04) | 6/6 tests passing (46 total) |
 | 5     | ✅ COMPLETE (2026-03-04) | 2/2 tests passing (48 total) |
 | 6     | Pending | |
-| 7     | Pending | |
+| 7     | ✅ COMPLETE (2026-03-06) | 2/2 tests passing (50 total). ONNX inference, mobile UI |
 | 8     | Pending | |
 
 ### Phase 0: Project Setup (2-3 hrs)
@@ -365,9 +365,13 @@ Adapt interface/uci.py from chess-ai. Set up lichess-bot bridge.
 - test_uci_protocol - isready->readyok, position->ok, go->bestmove
 - test_uci_time_management
 
-### Phase 7: Web Interface + Deployment (3-4 hrs)
+### Phase 7: Web Interface + Deployment (3-4 hrs) ✅ COMPLETE
 
-Copy web/ from chess-ai. ONNX export. Deploy to Render.com.
+Implemented: `web/app.py`, `web/static/`, `scripts/export_onnx.py`, `requirements.txt`, `Procfile`
+
+FastAPI stateless REST API (`POST /api/move`) backed by ONNX Runtime inference (~7x
+faster than PyTorch on CPU). Frontend uses drag-and-drop on desktop and click-to-move
+on mobile (detected via `pointer: coarse` media query).
 
 ### Phase 8: Self-Play RL (optional, ongoing)
 
