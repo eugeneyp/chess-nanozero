@@ -9,7 +9,7 @@ of connect4-alphazero to chess.
 **Goal:** Neural network evaluation + MCTS search (no alpha-beta), trained on
 Lichess Elite Database, deployable as Lichess bot and web interface.
 
-**Target:** 1500+ ELO | **Budget:** $300 GCP credits | **Inference:** 5 sec/move on CPU
+**Target:** 1500+ ELO ✅ (achieved ~2000 ELO) | **Budget:** $300 GCP credits | **Inference:** 5 sec/move on CPU
 
 ---
 
@@ -146,7 +146,15 @@ result) triples -> skip first 6 moves -> encode -> store as .npz
 - Final val_top5: 92.6%
 - Log: /logs/step4_medium_5m.csv
 - Detailed analysis: /logs/step4_medium_5m_analysis.md
-- **Best checkpoint for inference: `checkpoints/step4/epoch_0024.pt`**
+- **Best checkpoint: `checkpoints/step4/epoch_0024.pt` → ~1608 ELO**
+
+**Actual Step 6 results (medium model, +15.6M positions, 25 epochs on L4 GPU):**
+- Continued training from step 4 checkpoint (lr=5e-4 → 1.25e-4 cosine)
+- Speed: ~8,755 samp/s, ~39 min/epoch, ~16 hrs total
+- Best val_top1: 54.4% at epoch 22 (different val set — not comparable to step 4's 61%)
+- Best val_loss: epoch 24; near-zero train/val gap (1.89 vs 1.92) — no overfitting
+- Log: /logs/step6_medium_rest.csv
+- **Best checkpoint: `models/medium2.pt` (step6/epoch_0024) → ~2000 ELO**
 
 ---
 
@@ -212,7 +220,7 @@ schedule and data quality matter most for training.
 | 3     | ✅ COMPLETE (2026-03-03) | 7/7 tests passing (40 total) |
 | 4     | ✅ COMPLETE (2026-03-04) | 6/6 tests passing (46 total) |
 | 5     | ✅ COMPLETE (2026-03-04) | 2/2 tests passing (48 total) |
-| 6     | Pending | |
+| 6     | ✅ COMPLETE (2026-03-06) | medium2.pt trained on +15.6M pos → ~2000 ELO |
 | 7     | ✅ COMPLETE (2026-03-06) | 2/2 tests passing (50 total). ONNX inference, mobile UI |
 | 8     | Pending | |
 
