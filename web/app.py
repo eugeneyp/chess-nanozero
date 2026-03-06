@@ -11,6 +11,7 @@ Configuration via environment variables:
 
 import logging
 import os
+import random
 import time
 from pathlib import Path
 
@@ -110,20 +111,27 @@ def api_move(request: MoveRequest) -> MoveResponse:
 
     agent = get_agent()
 
+    opening_temp_moves = int(os.environ.get("OPENING_TEMP_MOVES", "15"))
+    temperature = 0.5 if board.fullmove_number <= opening_temp_moves else 0.0
+
     if request.time_limit == 0.0:
         # Pure policy head: single forward pass, no MCTS
-        best_move, policy_prob = _policy_move(board, agent)
+        best_move, policy_prob = _policy_move(board, agent, temperature)
         sims_done = 0
     else:
         game = ChessGame(board)
         # Compute deadline AFTER agent is loaded so model-load time doesn't eat into budget
         deadline = time.monotonic() + request.time_limit
         probs = agent.mcts.get_action_probs(
-            game, temperature=0.0, add_noise=False, deadline=deadline
+            game, temperature=temperature, add_noise=False, deadline=deadline
         )
         if not probs:
             raise HTTPException(status_code=500, detail="Engine returned no move")
-        best_move = max(probs, key=probs.get)
+        if temperature == 0.0:
+            best_move = max(probs, key=probs.get)
+        else:
+            moves, weights = zip(*probs.items())
+            best_move = random.choices(moves, weights=weights)[0]
         policy_prob = float(probs[best_move])
         root = getattr(agent.mcts, "root", None)
         sims_done = sum(c.visit_count for c in root.children.values()) if root else 0
@@ -139,7 +147,7 @@ def api_move(request: MoveRequest) -> MoveResponse:
     )
 
 
-def _policy_move(board: chess.Board, agent: AlphaZeroAgent) -> tuple[chess.Move, float]:
+def _policy_move(board: chess.Board, agent: AlphaZeroAgent, temperature: float = 0.0) -> tuple[chess.Move, float]:
     """Pick best move using the policy head only — no MCTS tree search."""
     from src.mcts.mcts import _softmax_masked
     encoding = encode_board(board)
@@ -148,7 +156,10 @@ def _policy_move(board: chess.Board, agent: AlphaZeroAgent) -> tuple[chess.Move,
         # ONNX path
         policy_np, _ = agent.mcts.sess.run(None, {agent.mcts.input_name: encoding[np.newaxis]})
         probs = _softmax_masked(policy_np[0], mask)
-        best_idx = int(probs.argmax())
+        if temperature > 0.0:
+            best_idx = int(np.random.choice(len(probs), p=probs / probs.sum()))
+        else:
+            best_idx = int(probs.argmax())
         return index_to_move(best_idx, board), float(probs[best_idx])
     else:
         # PyTorch path (lazy import to avoid numpy/torch compat issue at startup)
@@ -159,8 +170,12 @@ def _policy_move(board: chess.Board, agent: AlphaZeroAgent) -> tuple[chess.Move,
             policy_logits, _ = agent.mcts.model(board_t)
         mask_t = torch.frombuffer(mask.tobytes(), dtype=torch.uint8).bool()
         probs_t = masked_policy_probs(policy_logits[0], mask_t)
-        best_idx = int(probs_t.argmax().item())
-        return index_to_move(best_idx, board), float(probs_t[best_idx].item())
+        probs_np = probs_t.numpy()
+        if temperature > 0.0:
+            best_idx = int(np.random.choice(len(probs_np), p=probs_np / probs_np.sum()))
+        else:
+            best_idx = int(probs_np.argmax())
+        return index_to_move(best_idx, board), float(probs_np[best_idx])
 
 
 @app.get("/", include_in_schema=False)
