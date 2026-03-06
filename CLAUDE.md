@@ -123,7 +123,7 @@ bottlenecks. Fix before committing to 24-hour run.
 ## Supervised Learning (Phase 1 - PRIMARY)
 
 **Data:** Lichess Elite Database (database.nikonoel.fr)
-- 2400+ vs 2200+ rated, excluding bullet
+- 2500+ vs 2300+ rated (since Dec 2021), excluding bullet
 - Monthly PGN files, 100K-500K games each, free
 
 **Pipeline:** Download PGN -> parse with python-chess -> extract (board, move,
